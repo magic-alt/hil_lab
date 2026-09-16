@@ -50,8 +50,8 @@ module ad3542r_quad_stream #(
     reg [1:0] config_index;
     reg [31:0] startup_count;
     reg [5:0] bits_remaining;
-    reg [31:0] shift_a;
-    reg [31:0] shift_b;
+    reg [30:0] shift_a;
+    reg [30:0] shift_b;
 
     reg [15:0] active_ch0;
     reg [15:0] active_ch1;
@@ -108,8 +108,8 @@ module ad3542r_quad_stream #(
             config_index          <= 2'd0;
             startup_count         <= 32'd0;
             bits_remaining        <= 6'd0;
-            shift_a               <= 32'd0;
-            shift_b               <= 32'd0;
+            shift_a               <= 31'd0;
+            shift_b               <= 31'd0;
             active_ch0             <= SAFE_CODE;
             active_ch1             <= SAFE_CODE;
             active_ch2             <= SAFE_CODE;
@@ -162,8 +162,8 @@ module ad3542r_quad_stream #(
                 ST_CFG_START: begin
                     dac_cs_n <= 1'b0;
                     dac_sclk <= 1'b0;
-                    shift_a <= {config_current, 16'd0};
-                    shift_b <= {config_current, 16'd0};
+                    shift_a <= {config_current[14:0], 16'd0};
+                    shift_b <= {config_current[14:0], 16'd0};
                     bits_remaining <= 6'd16;
                     dac_sdio0_a <= config_current[15];
                     dac_sdio0_b <= config_current[15];
@@ -176,8 +176,8 @@ module ad3542r_quad_stream #(
                     end else begin
                         dac_sclk <= 1'b0;
                         if (bits_remaining > 6'd1) begin
-                            shift_a <= {shift_a[30:0], 1'b0};
-                            shift_b <= {shift_b[30:0], 1'b0};
+                            shift_a <= {shift_a[29:0], 1'b0};
+                            shift_b <= {shift_b[29:0], 1'b0};
                             dac_sdio0_a <= shift_a[30];
                             dac_sdio0_b <= shift_b[30];
                             bits_remaining <= bits_remaining - 6'd1;
@@ -216,8 +216,8 @@ module ad3542r_quad_stream #(
                         // Write instruction: R/W=0 and 7-bit address 0x2C
                         // (CH1_DAC_16B MSB).  With descending addressing and
                         // STREAM_MODE=4, data loops 0x2C..0x29.
-                        shift_a <= {8'h2C, 24'd0};
-                        shift_b <= {8'h2C, 24'd0};
+                        shift_a <= {7'h2C, 24'd0};
+                        shift_b <= {7'h2C, 24'd0};
                         bits_remaining <= 6'd8;
                         dac_sdio0_a <= 1'b0;
                         dac_sdio0_b <= 1'b0;
@@ -233,21 +233,21 @@ module ad3542r_quad_stream #(
                     end else begin
                         dac_sclk <= 1'b0;
                         if (bits_remaining > 6'd1) begin
-                            shift_a <= {shift_a[30:0], 1'b0};
-                            shift_b <= {shift_b[30:0], 1'b0};
+                            shift_a <= {shift_a[29:0], 1'b0};
+                            shift_b <= {shift_b[29:0], 1'b0};
                             dac_sdio0_a <= shift_a[30];
                             dac_sdio0_b <= shift_b[30];
                             bits_remaining <= bits_remaining - 6'd1;
                         end else begin
                             bits_remaining <= 6'd32;
                             if (force_safe || !enable) begin
-                                shift_a <= safe_word;
-                                shift_b <= safe_word;
+                                shift_a <= safe_word[30:0];
+                                shift_b <= safe_word[30:0];
                                 dac_sdio0_a <= safe_word[31];
                                 dac_sdio0_b <= safe_word[31];
                             end else begin
-                                shift_a <= active_word_a;
-                                shift_b <= active_word_b;
+                                shift_a <= active_word_a[30:0];
+                                shift_b <= active_word_b[30:0];
                                 dac_sdio0_a <= active_word_a[31];
                                 dac_sdio0_b <= active_word_b[31];
                             end
@@ -264,8 +264,8 @@ module ad3542r_quad_stream #(
                     end else begin
                         dac_sclk <= 1'b0;
                         if (bits_remaining > 6'd1) begin
-                            shift_a <= {shift_a[30:0], 1'b0};
-                            shift_b <= {shift_b[30:0], 1'b0};
+                            shift_a <= {shift_a[29:0], 1'b0};
+                            shift_b <= {shift_b[29:0], 1'b0};
                             dac_sdio0_a <= shift_a[30];
                             dac_sdio0_b <= shift_b[30];
                             bits_remaining <= bits_remaining - 6'd1;
@@ -278,8 +278,8 @@ module ad3542r_quad_stream #(
                                 active_ch1 <= SAFE_CODE;
                                 active_ch2 <= SAFE_CODE;
                                 active_ch3 <= SAFE_CODE;
-                                shift_a <= safe_word;
-                                shift_b <= safe_word;
+                                shift_a <= safe_word[30:0];
+                                shift_b <= safe_word[30:0];
                                 dac_sdio0_a <= safe_word[31];
                                 dac_sdio0_b <= safe_word[31];
                             end else if (pending_valid) begin
@@ -288,13 +288,13 @@ module ad3542r_quad_stream #(
                                 active_ch2 <= pending_ch2;
                                 active_ch3 <= pending_ch3;
                                 pending_valid <= 1'b0;
-                                shift_a <= pending_word_a;
-                                shift_b <= pending_word_b;
+                                shift_a <= pending_word_a[30:0];
+                                shift_b <= pending_word_b[30:0];
                                 dac_sdio0_a <= pending_word_a[31];
                                 dac_sdio0_b <= pending_word_b[31];
                             end else begin
-                                shift_a <= active_word_a;
-                                shift_b <= active_word_b;
+                                shift_a <= active_word_a[30:0];
+                                shift_b <= active_word_b[30:0];
                                 dac_sdio0_a <= active_word_a[31];
                                 dac_sdio0_b <= active_word_b[31];
                             end
