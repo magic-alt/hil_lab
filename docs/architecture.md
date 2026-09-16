@@ -76,7 +76,7 @@ Generates deterministic quadrature A/B transitions and an index pulse from a con
 
 ### `spi_encoder_emulator`
 
-G0 SPI mode-0 slave emulator. It serializes a supplied frame MSB-first and can XOR a deterministic fault mask into the transmitted frame.
+G0 SPI mode-0 slave emulator. It serializes a supplied frame MSB-first, captures the DUT MOSI frame, and can XOR a deterministic fault mask into the transmitted frame.
 
 The FPGA reference clock must substantially oversample SCLK. Exact supported SCLK limits are a board-integration validation item.
 

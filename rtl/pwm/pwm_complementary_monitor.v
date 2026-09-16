@@ -33,6 +33,9 @@ module pwm_complementary_monitor (
     wire high_fall;
     wire low_rise;
     wire low_fall;
+    wire [63:0] high_to_low_delta;
+    wire [63:0] low_to_high_delta;
+    wire [63:0] min_deadtime_extended;
 
     sync_2ff #(
         .WIDTH(2)
@@ -50,6 +53,9 @@ module pwm_complementary_monitor (
     assign high_fall = ~high_sync & high_d;
     assign low_rise  = low_sync & ~low_d;
     assign low_fall  = ~low_sync & low_d;
+    assign high_to_low_delta = timestamp - high_fall_timestamp;
+    assign low_to_high_delta = timestamp - low_fall_timestamp;
+    assign min_deadtime_extended = {32'd0, min_deadtime_ticks};
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -102,9 +108,9 @@ module pwm_complementary_monitor (
                     if (min_deadtime_ticks != 32'd0)
                         deadtime_violation_latched <= 1'b1;
                 end else if (high_fall_seen) begin
-                    deadtime_high_to_low_ticks <= timestamp - high_fall_timestamp;
+                    deadtime_high_to_low_ticks <= high_to_low_delta[31:0];
                     deadtime_high_to_low_valid <= 1'b1;
-                    if ((timestamp - high_fall_timestamp) < min_deadtime_ticks)
+                    if (high_to_low_delta < min_deadtime_extended)
                         deadtime_violation_latched <= 1'b1;
                 end
             end
@@ -116,9 +122,9 @@ module pwm_complementary_monitor (
                     if (min_deadtime_ticks != 32'd0)
                         deadtime_violation_latched <= 1'b1;
                 end else if (low_fall_seen) begin
-                    deadtime_low_to_high_ticks <= timestamp - low_fall_timestamp;
+                    deadtime_low_to_high_ticks <= low_to_high_delta[31:0];
                     deadtime_low_to_high_valid <= 1'b1;
-                    if ((timestamp - low_fall_timestamp) < min_deadtime_ticks)
+                    if (low_to_high_delta < min_deadtime_extended)
                         deadtime_violation_latched <= 1'b1;
                 end
             end

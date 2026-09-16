@@ -30,6 +30,8 @@ module hil_digital_core #(
     output wire                         spi_miso,
     output wire                         spi_frame_active,
     output wire                         spi_frame_done_pulse,
+    output wire [15:0]                  spi_received_bit_count,
+    output wire [SPI_FRAME_BITS-1:0]    spi_received_mosi_data,
 
     input  wire                         dio_event_arm,
     input  wire [63:0]                  dio_event_timestamp,
@@ -152,7 +154,8 @@ module hil_digital_core #(
         .spi_miso           (spi_miso),
         .frame_active       (spi_frame_active),
         .frame_done_pulse   (spi_frame_done_pulse),
-        .received_bit_count ()
+        .received_bit_count (spi_received_bit_count),
+        .received_mosi_data (spi_received_mosi_data)
     );
 
     dio_event_scheduler #(

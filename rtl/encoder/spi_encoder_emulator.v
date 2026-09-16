@@ -15,7 +15,8 @@ module spi_encoder_emulator #(
     output reg                   spi_miso,
     output reg                   frame_active,
     output reg                   frame_done_pulse,
-    output reg  [15:0]           received_bit_count
+    output reg  [15:0]           received_bit_count,
+    output reg  [FRAME_BITS-1:0] received_mosi_data
 );
 
     wire [2:0] sync_bus;
@@ -26,11 +27,13 @@ module spi_encoder_emulator #(
     reg spi_cs_n_d;
     reg spi_sclk_d;
     reg [FRAME_BITS-1:0] shift_reg;
+    reg [FRAME_BITS-1:0] rx_shift_reg;
     reg [15:0] remaining_bits;
 
     wire cs_fall;
     wire cs_rise;
     wire sclk_fall;
+    wire sclk_rise;
     wire [FRAME_BITS-1:0] effective_frame;
 
     sync_2ff #(
@@ -49,6 +52,7 @@ module spi_encoder_emulator #(
     assign cs_fall   = spi_cs_n_d & ~spi_cs_n;
     assign cs_rise   = ~spi_cs_n_d & spi_cs_n;
     assign sclk_fall = spi_sclk_d & ~spi_sclk;
+    assign sclk_rise = ~spi_sclk_d & spi_sclk;
 
     assign effective_frame = fault_enable ?
                              (frame_data ^ fault_flip_mask) :
@@ -70,8 +74,10 @@ module spi_encoder_emulator #(
             frame_active       <= 1'b0;
             frame_done_pulse   <= 1'b0;
             received_bit_count <= 16'd0;
+            received_mosi_data <= {FRAME_BITS{1'b0}};
             remaining_bits     <= 16'd0;
             shift_reg          <= {FRAME_BITS{1'b0}};
+            rx_shift_reg       <= {FRAME_BITS{1'b0}};
         end else begin
             frame_done_pulse <= 1'b0;
 
@@ -79,19 +85,25 @@ module spi_encoder_emulator #(
                 shift_reg          <= effective_frame;
                 remaining_bits     <= FRAME_BITS;
                 received_bit_count <= 16'd0;
+                received_mosi_data <= {FRAME_BITS{1'b0}};
+                rx_shift_reg       <= {FRAME_BITS{1'b0}};
                 frame_active       <= 1'b1;
                 spi_miso           <= effective_frame[FRAME_BITS-1];
             end else if (frame_active && !spi_cs_n && sclk_fall) begin
                 if (remaining_bits > 16'd1) begin
                     shift_reg <= {shift_reg[FRAME_BITS-2:0], 1'b0};
                     remaining_bits <= remaining_bits - 16'd1;
-                    received_bit_count <= received_bit_count + 16'd1;
                     spi_miso <= shift_reg[FRAME_BITS-2];
                 end else begin
                     remaining_bits <= 16'd0;
-                    received_bit_count <= received_bit_count + 16'd1;
                     spi_miso <= 1'b0;
                 end
+            end
+
+            if (frame_active && !spi_cs_n && sclk_rise) begin
+                rx_shift_reg <= {rx_shift_reg[FRAME_BITS-2:0], spi_mosi};
+                received_mosi_data <= {rx_shift_reg[FRAME_BITS-2:0], spi_mosi};
+                received_bit_count <= received_bit_count + 16'd1;
             end
 
             if (cs_rise && frame_active) begin

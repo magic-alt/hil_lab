@@ -24,6 +24,9 @@ module pwm_capture (
 
     wire rise_edge;
     wire fall_edge;
+    wire [63:0] period_delta;
+    wire [63:0] high_delta;
+    wire [63:0] low_delta;
 
     sync_2ff #(
         .WIDTH(1)
@@ -37,6 +40,9 @@ module pwm_capture (
     assign pwm_sync = pwm_sync_int;
     assign rise_edge = pwm_sync_int & ~pwm_sync_d;
     assign fall_edge = ~pwm_sync_int & pwm_sync_d;
+    assign period_delta = timestamp - last_rise_timestamp;
+    assign high_delta = timestamp - last_rise_timestamp;
+    assign low_delta = timestamp - last_fall_timestamp;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
@@ -64,12 +70,12 @@ module pwm_capture (
 
             if (rise_edge) begin
                 if (have_rise) begin
-                    period_ticks <= timestamp - last_rise_timestamp;
+                    period_ticks <= period_delta[31:0];
                     period_valid <= 1'b1;
                 end
 
                 if (have_fall) begin
-                    low_ticks <= timestamp - last_fall_timestamp;
+                    low_ticks <= low_delta[31:0];
                     low_valid <= 1'b1;
                 end
 
@@ -79,7 +85,7 @@ module pwm_capture (
 
             if (fall_edge) begin
                 if (have_rise) begin
-                    high_ticks <= timestamp - last_rise_timestamp;
+                    high_ticks <= high_delta[31:0];
                     high_valid <= 1'b1;
                 end
 

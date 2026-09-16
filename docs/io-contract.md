@@ -39,7 +39,7 @@ Logical signals:
 - DUT -> HIL: `spi_sclk`, `spi_cs_n`, `spi_mosi`;
 - HIL -> DUT: `spi_miso`.
 
-G0 supports SPI mode 0 at the core level. Protocol-specific frame formatting and CRC generation are intentionally separated from the serial shifter; `spi_frame_data` provides the frame to transmit and `spi_fault_flip_mask` supports deterministic bit corruption.
+G0 supports SPI mode 0 at the core level. Protocol-specific frame formatting and CRC generation are intentionally separated from the serial shifter; `spi_frame_data` provides the frame to transmit, `spi_fault_flip_mask` supports deterministic bit corruption, and the captured MOSI frame is exposed for future command-aware encoder models.
 
 ## Digital event outputs
 
