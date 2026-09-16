@@ -1,0 +1,40 @@
+# FPGA tool output
+.Xil/
+*.jou
+*.log
+*.str
+*.dcp
+*.bit
+*.bin
+*.ltx
+*.wdb
+*.vcd
+*.fst
+*.vvp
+*.pb
+*.hwdef
+*.hwh
+*.xsa
+
+# Vivado generated directories
+*.cache/
+*.gen/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.srcs/
+
+# Local build and Python
+build/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

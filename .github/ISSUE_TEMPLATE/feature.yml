@@ -1,0 +1,36 @@
+name: HIL capability
+about: Propose a new HIL, FPGA, analog-I/O, test, or automation capability.
+title: "[HIL] "
+labels: []
+body:
+  - type: dropdown
+    id: gate
+    attributes:
+      label: Roadmap gate
+      options:
+        - G0 Digital HIL
+        - G1 DAC
+        - G2 PMSM closed loop
+        - G3 ADC/DAC PCB
+        - G4 Fault injection
+        - G5 pytest/CI
+        - G6 dual inertia
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / need
+      description: State the validation gap or capability needed.
+    validations:
+      required: true
+  - type: textarea
+    id: interface
+    attributes:
+      label: Proposed interface and timing
+      description: Include clock domain, signal directions, units and safe states.
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification plan
+      description: Define simulation, loopback and DUT checks.
