@@ -53,6 +53,10 @@ module axu2cgb_hil_top #(
     wire core_spi_miso;
     wire [15:0] core_dio_out;
 
+    // The first board wrapper keeps the reusable core observability ports wired
+    // for the future register/host bridge. They are intentionally not consumed by
+    // the pin-only G0 wrapper yet.
+    /* verilator lint_off UNUSEDSIGNAL */
     wire [63:0] timestamp;
     wire [95:0] pwm_period_ticks;
     wire [95:0] pwm_high_ticks;
@@ -69,6 +73,7 @@ module axu2cgb_hil_top #(
     wire [SPI_FRAME_BITS-1:0] spi_received_mosi_data;
     wire        dio_event_armed;
     wire        dio_event_done_pulse;
+    /* verilator lint_on UNUSEDSIGNAL */
 
     reg pwm_seen_latched;
     wire fault_summary;
