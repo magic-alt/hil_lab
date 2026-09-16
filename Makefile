@@ -13,11 +13,14 @@ RTL_IO := rtl/io/dio_event_scheduler.v
 RTL_TOP := rtl/top/hil_digital_core.v
 RTL := $(RTL_COMMON) $(RTL_TIME) $(RTL_PWM) $(RTL_ENCODER) $(RTL_IO) $(RTL_TOP)
 
-.PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event clean
+AXU2CGB_RTL := boards/zu2cg/rtl/axu2cgb_clock_gen.v boards/zu2cg/rtl/axu2cgb_hil_top.v
+
+.PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event \
+	board-constraints board-compile board-test board-lint clean
 
 all: verify
 
-verify: policy compile test lint
+verify: policy compile test lint board-constraints board-compile board-test board-lint
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -52,6 +55,19 @@ test-spi: $(BUILD_DIR)
 test-event: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_dio_event_scheduler.vvp $(RTL_TIME) rtl/io/dio_event_scheduler.v sim/tb_dio_event_scheduler.v
 	$(VVP) $(BUILD_DIR)/tb_dio_event_scheduler.vvp
+
+board-constraints:
+	$(PYTHON) tools/axu2cgb_constraints_check.py
+
+board-compile: $(BUILD_DIR)
+	$(IVERILOG) -DHIL_SIMULATION -g2005 -Wall -s axu2cgb_hil_top -o $(BUILD_DIR)/axu2cgb_hil_top.vvp $(RTL) $(AXU2CGB_RTL)
+
+board-test: $(BUILD_DIR)
+	$(IVERILOG) -DHIL_SIMULATION -g2012 -Wall -s tb_axu2cgb_hil_top -o $(BUILD_DIR)/tb_axu2cgb_hil_top.vvp $(RTL) $(AXU2CGB_RTL) sim/tb_axu2cgb_hil_top.v
+	$(VVP) $(BUILD_DIR)/tb_axu2cgb_hil_top.vvp
+
+board-lint:
+	$(VERILATOR) -DHIL_SIMULATION --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module axu2cgb_hil_top $(RTL) $(AXU2CGB_RTL)
 
 clean:
 	rm -rf $(BUILD_DIR)
