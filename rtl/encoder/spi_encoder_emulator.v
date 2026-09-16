@@ -27,7 +27,6 @@ module spi_encoder_emulator #(
     reg spi_cs_n_d;
     reg spi_sclk_d;
     reg [FRAME_BITS-1:0] shift_reg;
-    reg [FRAME_BITS-1:0] rx_shift_reg;
     reg [15:0] remaining_bits;
 
     wire cs_fall;
@@ -77,7 +76,6 @@ module spi_encoder_emulator #(
             received_mosi_data <= {FRAME_BITS{1'b0}};
             remaining_bits     <= 16'd0;
             shift_reg          <= {FRAME_BITS{1'b0}};
-            rx_shift_reg       <= {FRAME_BITS{1'b0}};
         end else begin
             frame_done_pulse <= 1'b0;
 
@@ -86,7 +84,6 @@ module spi_encoder_emulator #(
                 remaining_bits     <= FRAME_BITS;
                 received_bit_count <= 16'd0;
                 received_mosi_data <= {FRAME_BITS{1'b0}};
-                rx_shift_reg       <= {FRAME_BITS{1'b0}};
                 frame_active       <= 1'b1;
                 spi_miso           <= effective_frame[FRAME_BITS-1];
             end else if (frame_active && !spi_cs_n && sclk_fall) begin
@@ -101,8 +98,7 @@ module spi_encoder_emulator #(
             end
 
             if (frame_active && !spi_cs_n && sclk_rise) begin
-                rx_shift_reg <= {rx_shift_reg[FRAME_BITS-2:0], spi_mosi};
-                received_mosi_data <= {rx_shift_reg[FRAME_BITS-2:0], spi_mosi};
+                received_mosi_data <= {received_mosi_data[FRAME_BITS-2:0], spi_mosi};
                 received_bit_count <= received_bit_count + 16'd1;
             end
 

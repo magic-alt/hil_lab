@@ -45,6 +45,8 @@ The reusable G0 RTL uses one FPGA reference clock. External DUT signals are asyn
 
 This gives deterministic sampled measurements, not analog-time metrology. At a 100 MHz reference clock, one timestamp tick is 10 ns. Synchronizer latency shifts absolute edge timestamps, while differences between equally synchronized edges retain clock-tick measurement resolution.
 
+PWM interval outputs are 32-bit clock-tick values. Intervals longer than `0xffffffff` ticks saturate at `0xffffffff` rather than wrapping silently.
+
 For later sub-clock or very-high-precision timing, dedicated input capture resources or vendor-specific primitives may be introduced under `boards/` without changing the core measurement interface.
 
 ## Modules
@@ -85,6 +87,12 @@ The FPGA reference clock must substantially oversample SCLK. Exact supported SCL
 Holds one pending event. At or after a specified FPGA timestamp, a masked set of digital outputs is updated atomically.
 
 This is the seed for later fault-injection and deterministic stimulus sequencing.
+
+## Communications boundary
+
+Generation 1 also needs DUT communications, but CAN/CAN FD, RS-485 and EtherCAT are intentionally kept out of the reusable timing core until their physical/transceiver and protocol ownership are fixed. They belong behind board-specific adapters or host/controller interfaces, while the PL exposes deterministic timestamp/event primitives to them.
+
+The G0 tracking issue owns the first communication-interface seam and hardware loopback definition. A full EtherCAT master is not a reusable-PL requirement.
 
 ## Explicit non-goals of G0
 
