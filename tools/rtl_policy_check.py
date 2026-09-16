@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Small dependency-free policy gate for synthesizable RTL."""
+"""Small dependency-free policy gate for synthesizable Verilog RTL."""
 
 from pathlib import Path
 import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-RTL = ROOT / "rtl"
+RTL_ROOTS = [
+    ROOT / "rtl",
+    ROOT / "boards" / "zu2cg" / "rtl",
+]
 
 FORBIDDEN = {
     r"\balways_ff\b": "SystemVerilog always_ff",
@@ -21,27 +24,35 @@ FORBIDDEN = {
 
 def main() -> int:
     errors = []
+    verilog_files = []
 
-    sv_files = sorted(RTL.rglob("*.sv")) + sorted(RTL.rglob("*.svh"))
-    for path in sv_files:
-        errors.append(f"{path.relative_to(ROOT)}: SystemVerilog file extension is not allowed")
+    for rtl_root in RTL_ROOTS:
+        if not rtl_root.exists():
+            continue
 
-    verilog_files = sorted(RTL.rglob("*.v"))
+        sv_files = sorted(rtl_root.rglob("*.sv")) + sorted(rtl_root.rglob("*.svh"))
+        for path in sv_files:
+            errors.append(f"{path.relative_to(ROOT)}: SystemVerilog file extension is not allowed")
+
+        verilog_files.extend(sorted(rtl_root.rglob("*.v")))
+
     if not verilog_files:
-        errors.append("rtl/: no Verilog source files found")
+        errors.append("no synthesizable Verilog source files found")
 
     for path in verilog_files:
         text = path.read_text(encoding="utf-8")
         rel = path.relative_to(ROOT)
+        code = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+        code = re.sub(r"//.*", "", code)
 
         if "`default_nettype none" not in text:
             errors.append(f"{rel}: missing `default_nettype none")
 
-        if re.search(r"\binitial\b", text):
+        if re.search(r"\binitial\b", code):
             errors.append(f"{rel}: synthesizable core must not contain initial blocks")
 
         for pattern, description in FORBIDDEN.items():
-            if re.search(pattern, text):
+            if re.search(pattern, code):
                 errors.append(f"{rel}: forbidden construct: {description}")
 
     if errors:
