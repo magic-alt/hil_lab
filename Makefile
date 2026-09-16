@@ -13,14 +13,17 @@ RTL_IO := rtl/io/dio_event_scheduler.v
 RTL_TOP := rtl/top/hil_digital_core.v
 RTL := $(RTL_COMMON) $(RTL_TIME) $(RTL_PWM) $(RTL_ENCODER) $(RTL_IO) $(RTL_TOP)
 
+RTL_DAC := rtl/dac/dac_eval_pattern_generator.v rtl/dac/ad3542r_quad_stream.v
 AXU2CGB_RTL := boards/zu2cg/rtl/axu2cgb_clock_gen.v boards/zu2cg/rtl/axu2cgb_hil_top.v
 
 .PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event \
+	dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint clean
 
 all: verify
 
-verify: policy compile test lint board-constraints board-compile board-test board-lint
+verify: policy compile test lint dac-compile dac-test dac-pattern-test dac-lint \
+	board-constraints board-compile board-test board-lint
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -55,6 +58,20 @@ test-spi: $(BUILD_DIR)
 test-event: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_dio_event_scheduler.vvp $(RTL_TIME) rtl/io/dio_event_scheduler.v sim/tb_dio_event_scheduler.v
 	$(VVP) $(BUILD_DIR)/tb_dio_event_scheduler.vvp
+
+dac-compile: $(BUILD_DIR)
+	$(IVERILOG) -g2005 -Wall -s ad3542r_quad_stream -o $(BUILD_DIR)/ad3542r_quad_stream.vvp rtl/dac/ad3542r_quad_stream.v
+
+dac-test: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -s tb_ad3542r_quad_stream -o $(BUILD_DIR)/tb_ad3542r_quad_stream.vvp rtl/dac/ad3542r_quad_stream.v sim/tb_ad3542r_quad_stream.v
+	$(VVP) $(BUILD_DIR)/tb_ad3542r_quad_stream.vvp
+
+dac-pattern-test: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -s tb_dac_eval_pattern_generator -o $(BUILD_DIR)/tb_dac_eval_pattern_generator.vvp rtl/dac/dac_eval_pattern_generator.v sim/tb_dac_eval_pattern_generator.v
+	$(VVP) $(BUILD_DIR)/tb_dac_eval_pattern_generator.vvp
+
+dac-lint:
+	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module ad3542r_quad_stream rtl/dac/ad3542r_quad_stream.v
 
 board-constraints:
 	$(PYTHON) tools/axu2cgb_constraints_check.py
