@@ -15,6 +15,7 @@ RTL := $(RTL_COMMON) $(RTL_TIME) $(RTL_PWM) $(RTL_ENCODER) $(RTL_IO) $(RTL_TOP)
 
 RTL_DAC := rtl/dac/dac_eval_pattern_generator.v rtl/dac/ad3542r_quad_stream.v
 AXU2CGB_RTL := boards/zu2cg/rtl/axu2cgb_clock_gen.v boards/zu2cg/rtl/axu2cgb_hil_top.v
+BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 
 .PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event \
 	dac-compile dac-test dac-pattern-test dac-lint \
@@ -77,14 +78,14 @@ board-constraints:
 	$(PYTHON) tools/axu2cgb_constraints_check.py
 
 board-compile: $(BUILD_DIR)
-	$(IVERILOG) -DHIL_SIMULATION -g2005 -Wall -s axu2cgb_hil_top -o $(BUILD_DIR)/axu2cgb_hil_top.vvp $(RTL) $(AXU2CGB_RTL)
+	$(IVERILOG) -DHIL_SIMULATION -g2005 -Wall -s axu2cgb_hil_top -o $(BUILD_DIR)/axu2cgb_hil_top.vvp $(BOARD_RTL)
 
 board-test: $(BUILD_DIR)
-	$(IVERILOG) -DHIL_SIMULATION -g2012 -Wall -s tb_axu2cgb_hil_top -o $(BUILD_DIR)/tb_axu2cgb_hil_top.vvp $(RTL) $(AXU2CGB_RTL) sim/tb_axu2cgb_hil_top.v
+	$(IVERILOG) -DHIL_SIMULATION -g2012 -Wall -s tb_axu2cgb_hil_top -o $(BUILD_DIR)/tb_axu2cgb_hil_top.vvp $(BOARD_RTL) sim/tb_axu2cgb_hil_top.v
 	$(VVP) $(BUILD_DIR)/tb_axu2cgb_hil_top.vvp
 
 board-lint:
-	$(VERILATOR) -DHIL_SIMULATION --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module axu2cgb_hil_top $(RTL) $(AXU2CGB_RTL)
+	$(VERILATOR) -DHIL_SIMULATION --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module axu2cgb_hil_top $(BOARD_RTL)
 
 clean:
 	rm -rf $(BUILD_DIR)

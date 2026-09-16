@@ -15,6 +15,7 @@ module tb_axu2cgb_hil_top;
     reg clear_faults = 1'b0;
     reg force_safe = 1'b1;
     reg test_pattern_enable = 1'b0;
+    reg [1:0] dac_pattern_select = 2'b00;
 
     wire enc_a;
     wire enc_b;
@@ -22,6 +23,15 @@ module tb_axu2cgb_hil_top;
     wire spi_miso;
     wire [15:0] dio;
     wire [3:0] status;
+    wire dac_sclk;
+    wire dac_cs_n;
+    wire dac_mosi_a;
+    wire dac_mosi_b;
+    wire dac_reset_n;
+    wire dac_ldac_n;
+    wire dac_output_enable;
+    wire dac_initialized;
+    wire dac_stream_active;
     wire [3:0] led_n;
 
     reg [23:0] spi_rx;
@@ -34,7 +44,8 @@ module tb_axu2cgb_hil_top;
         .ENCODER_STEP_PERIOD_TICKS(4),
         .SPI_FRAME_BITS(24),
         .SPI_FRAME_DATA(24'hA55A3C),
-        .MIN_DEADTIME_TICKS(2)
+        .MIN_DEADTIME_TICKS(2),
+        .DAC_STARTUP_DELAY_CYCLES(8)
     ) dut (
         .pl_ref_clk(clk),
         .pwm_high_in(pwm_high),
@@ -48,17 +59,25 @@ module tb_axu2cgb_hil_top;
         .clear_faults_in(clear_faults),
         .force_safe_in(force_safe),
         .test_pattern_enable_in(test_pattern_enable),
+        .dac_pattern_select_in(dac_pattern_select),
         .enc_a_out(enc_a),
         .enc_b_out(enc_b),
         .enc_z_out(enc_z),
         .spi_miso_out(spi_miso),
         .dio_out(dio),
         .status_out(status),
+        .dac_sclk_out(dac_sclk),
+        .dac_cs_n_out(dac_cs_n),
+        .dac_mosi_a_out(dac_mosi_a),
+        .dac_mosi_b_out(dac_mosi_b),
+        .dac_reset_n_out(dac_reset_n),
+        .dac_ldac_n_out(dac_ldac_n),
+        .dac_output_enable_out(dac_output_enable),
+        .dac_initialized_out(dac_initialized),
+        .dac_stream_active_out(dac_stream_active),
         .led_n(led_n)
     );
 
-    // HIL_SIMULATION bypasses the physical 25 -> 100 MHz MMCM, so the testbench
-    // directly drives a 100 MHz logical HIL clock.
     always #5 clk = ~clk;
 
     task spi_transfer_24;
@@ -69,7 +88,6 @@ module tb_axu2cgb_hil_top;
             spi_sclk = 1'b0;
             spi_cs_n = 1'b0;
             repeat (12) @(posedge clk);
-
             for (bit_index = 23; bit_index >= 0; bit_index = bit_index - 1) begin
                 spi_mosi = tx_word[bit_index];
                 repeat (10) @(posedge clk);
@@ -80,7 +98,6 @@ module tb_axu2cgb_hil_top;
                 spi_sclk = 1'b0;
                 repeat (10) @(posedge clk);
             end
-
             spi_cs_n = 1'b1;
             spi_mosi = 1'b0;
             repeat (12) @(posedge clk);
@@ -113,8 +130,8 @@ module tb_axu2cgb_hil_top;
             $display("ERROR: clock/reset status=%b expected xx11", status);
             errors = errors + 1;
         end
-
-        if (dio !== 16'h0000 || enc_a !== 1'b0 || enc_b !== 1'b0 || spi_miso !== 1'b0) begin
+        if (dio !== 16'h0000 || enc_a !== 1'b0 || enc_b !== 1'b0 ||
+            spi_miso !== 1'b0 || dac_output_enable !== 1'b0) begin
             $display("ERROR: outputs not safe while disabled");
             errors = errors + 1;
         end
@@ -128,6 +145,19 @@ module tb_axu2cgb_hil_top;
             $display("ERROR: test pattern dio=%04x expected=A55A", dio);
             errors = errors + 1;
         end
+
+        wait (dac_initialized === 1'b1);
+        wait (dac_stream_active === 1'b1);
+        repeat (4) @(posedge clk);
+        if (dac_output_enable !== 1'b1 || dac_reset_n !== 1'b1 ||
+            dac_ldac_n !== 1'b1 || dac_cs_n !== 1'b0) begin
+            $display("ERROR: DAC board integration not active init=%b stream=%b oe=%b",
+                     dac_initialized, dac_stream_active, dac_output_enable);
+            errors = errors + 1;
+        end
+
+        dac_pattern_select = 2'b10;
+        repeat (12) @(posedge clk);
 
         encoder_changed = 1'b0;
         repeat (24) begin
@@ -155,7 +185,6 @@ module tb_axu2cgb_hil_top;
             errors = errors + 1;
         end
 
-        // Intentional phase-U shoot-through command should latch a fault.
         pwm_high[0] = 1'b1;
         pwm_low[0]  = 1'b1;
         repeat (8) @(posedge clk);
@@ -178,7 +207,8 @@ module tb_axu2cgb_hil_top;
 
         force_safe = 1'b1;
         repeat (8) @(posedge clk);
-        if (dio !== 16'h0000 || enc_a !== 1'b0 || enc_b !== 1'b0 || spi_miso !== 1'b0) begin
+        if (dio !== 16'h0000 || enc_a !== 1'b0 || enc_b !== 1'b0 ||
+            spi_miso !== 1'b0 || dac_output_enable !== 1'b0) begin
             $display("ERROR: FORCE_SAFE did not suppress physical outputs");
             errors = errors + 1;
         end
@@ -187,7 +217,6 @@ module tb_axu2cgb_hil_top;
             $display("PASS: tb_axu2cgb_hil_top");
         else
             $display("FAIL: tb_axu2cgb_hil_top errors=%0d", errors);
-
         $finish;
     end
 
