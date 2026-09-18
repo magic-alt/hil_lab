@@ -136,7 +136,7 @@ def _copy_ring_window(
         return
 
     first_count = min(record_count, RING_CAPACITY - start_slot)
-    first_src = RING_OFFSET = PWM_SUMMARY_SIZE + (start_slot * EDGE_RECORD_SIZE)
+    first_src = PWM_SUMMARY_SIZE + (start_slot * EDGE_RECORD_SIZE)
     first_len = first_count * EDGE_RECORD_SIZE
     full_blob[first_src : first_src + first_len] = mapped[
         first_src : first_src + first_len
