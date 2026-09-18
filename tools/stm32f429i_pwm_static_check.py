@@ -164,6 +164,7 @@ def main() -> int:
             device = target.findtext("./TargetOption/TargetCommonOption/Device", default="")
             pack = target.findtext("./TargetOption/TargetCommonOption/PackID", default="")
             ac6 = target.findtext("uAC6", default="")
+            clang_as = target.findtext("./TargetOption/TargetArmAds/Aads/ClangAsOpt", default="")
             output = target.findtext("./TargetOption/TargetCommonOption/OutputDirectory", default="")
             hex_enable = target.findtext("./TargetOption/TargetCommonOption/CreateHexFile", default="")
             defines_raw = target.findtext(
@@ -178,6 +179,8 @@ def main() -> int:
                 errors.append(f"{name}: wrong DFP {pack}")
             if ac6 != "1":
                 errors.append(f"{name}: Arm Compiler 6 is not enabled")
+            if clang_as != "4":
+                errors.append(f"{name}: startup assembler is not in AC6 legacy Arm-syntax mode")
             if name not in output:
                 errors.append(f"{name}: output directory is not target-specific")
             if hex_enable != "1":
