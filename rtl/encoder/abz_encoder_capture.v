@@ -31,7 +31,7 @@ module abz_encoder_capture (
         .sync_out(enc_sync)
     );
 
-    assign ab_now = {enc_sync[1], enc_sync[0]};
+    assign ab_now = {enc_sync[0], enc_sync[1]};
     assign z_now  = enc_sync[2];
 
     always @(posedge clk or negedge rst_n) begin
