@@ -169,6 +169,35 @@ The first implementation is semantics-first C. Before claiming the final B1
 timing bound, inspect generated PRU assembly and optimize/unroll the hot loop if
 required.
 
+## STM32F429I-DISC1 stimulus source
+
+The first physical B1 input source is now provided in:
+
+```text
+boards/stm32f429i_disc1/
+```
+
+It uses TIM8 complementary outputs:
+
+```text
+PC6 / TIM8_CH1  / P1-57 -> BBB P9_29 / UH
+PA5 / TIM8_CH1N / P2-21 -> BBB P9_30 / UL
+GND                         BBB GND
+```
+
+Default waveform:
+
+```text
+20 kHz
+50% reference duty
+700 ns dead-time
+3.3 V logic
+```
+
+The project also includes 600/700/800 ns dead-time profiles and
+5/25/50/75/95% duty profiles for the B1 sweep. See
+`boards/stm32f429i_disc1/README.md`.
+
 ## Physical verification sequence
 
 1. Use a logic-level 20 kHz complementary PWM source.
