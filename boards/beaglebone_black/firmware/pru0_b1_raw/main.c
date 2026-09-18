@@ -90,7 +90,11 @@ static void clear_response(uint16_t request_type, uint32_t seq)
 
 static void raw_shared_init(void)
 {
-    uint32_t generation = g_raw_shared.generation + 1u;
+    uint32_t generation =
+        ((g_raw_shared.magic == HIL_RAW_CAPTURE_MAGIC) &&
+         (g_raw_shared.version == HIL_RAW_CAPTURE_VERSION))
+            ? (g_raw_shared.generation + 1u)
+            : 1u;
 
     g_raw_shared.magic = HIL_RAW_CAPTURE_MAGIC;
     g_raw_shared.version = HIL_RAW_CAPTURE_VERSION;
