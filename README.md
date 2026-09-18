@@ -91,7 +91,8 @@ hil_lab/
 ├── sim/                         self-checking FPGA simulations
 ├── boards/
 │   ├── zu2cg/                   AXU2CGB board integration
-│   └── beaglebone_black/        PRU backend board contract / future firmware
+│   ├── beaglebone_black/        PRU digital-HIL backend
+│   └── stm32f429i_disc1/        20 kHz complementary-PWM stimulus source
 ├── docs/
 │   ├── architecture.md
 │   ├── backend-contract.md      shared behavioral contract
@@ -106,14 +107,14 @@ hil_lab/
 
 ## Verification
 
-Current FPGA gates:
+Current software/RTL gates:
 
 ```bash
 sudo apt-get install iverilog verilator make python3
 make verify
 ```
 
-The BBB track will add its own PRU build/unit/loopback gates without weakening or replacing `make verify`.
+`make verify` also checks the BBB host/core contracts and the STM32F429I-DISC1 PWM stimulus configuration. Real PRU and STM32 cross-compilation remain explicit hardware/toolchain steps.
 
 Hardware evidence must always record:
 
