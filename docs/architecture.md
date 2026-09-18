@@ -10,7 +10,7 @@ The architecture now separates:
 - **real-time backend implementations**;
 - **electrical DUT adaptation**.
 
-This permits a ZU2CG FPGA Full-HIL backend and a BeagleBone Black PRU Digital-HIL backend to coexist without forcing either platform into the other's implementation model.
+This permits a ZU2CG FPGA Full-HIL backend, a Zynq-7010 FPGA-Lite backend and a BeagleBone Black PRU Digital-HIL backend to coexist without forcing any platform into another backend's implementation model.
 
 ## System layering
 
@@ -83,7 +83,7 @@ The common contract represents hardware time as:
 
 Host software may convert ticks to SI time, but raw timing evidence must remain available.
 
-The ZU2CG G0 reference uses a 100 MHz FPGA clock (10 ns/tick).
+The ZU2CG G0 reference uses a 100 MHz FPGA clock (10 ns/tick). The AX7010 FPGA-Lite target also derives a 100 MHz HIL clock from its 50 MHz PL oscillator.
 
 The BBB PRU time source is selected and physically characterized in B0 (#11). Its exact timer implementation must not be assumed by host tests before B0 freezes it.
 
@@ -105,6 +105,31 @@ Reusable blocks include:
 Board-specific clocking, pins and future analog interfaces stay under `boards/zu2cg/`.
 
 G1+ extends this backend with deterministic DAC output, then PMSM and robotic-joint plant models.
+
+## Zynq-7010 FPGA-Lite backend
+
+The XC7Z010 lane fills the gap between software-programmable PRU Digital-HIL
+and the larger ZU2CG Full-HIL fabric.
+
+The first board target is ALINX AX7010 because it exposes two 34-I/O PL
+expansion headers and a dedicated 50 MHz PL clock. Board-specific integration
+stays under `boards/zynq7010/`; reusable PWM/encoder/motor blocks stay under
+the root `rtl/` hierarchy.
+
+Initial responsibilities:
+
+- deterministic complementary PWM generation plus parallel capture;
+- ABZ generation and capture;
+- SSI/SPI-style synchronous encoder emulation/acquisition;
+- deterministic digital faults;
+- a Q16.16 fixed-step single-motor PMSM-lite plant;
+- later AXI-Lite/BRAM control from the Cortex-A9 PS.
+
+The PS/Linux side is a control plane only. PWM edges, encoder timing and motor
+model stepping remain in PL.
+
+Zynq-7010 does not replace the ZU2CG backend for high-channel-count ADC/DAC,
+multi-axis models, dual-inertia joint dynamics or final Full-HIL expansion.
 
 ## BBB PRU backend
 

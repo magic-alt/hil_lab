@@ -1,11 +1,12 @@
 # Servo HIL Roadmap
 
-`hil_lab` uses two parallel development tracks with different responsibilities.
+`hil_lab` uses three parallel development tracks with different responsibilities.
 
 - **Track A (G-series): ZU2CG / AXU2CGB Full HIL** is the primary product path.
 - **Track B (B-series): BeagleBone Black / PRU Digital HIL** is a companion path for rapid deterministic digital testing.
+- **Track C (C-series): Zynq-7010 / AX7010 FPGA-Lite HIL** is a low-cost parallel-FPGA path for signal generation/capture and a resource-bounded single-motor plant.
 
-Track B accelerates firmware validation but does not replace Track A analog/PMSM/joint-model work.
+Tracks B/C accelerate firmware validation but do not replace Track A analog/multi-axis/joint-model work.
 
 # Track A — ZU2CG / AXU2CGB Full HIL
 
@@ -179,11 +180,120 @@ Required common semantics:
 
 ZU2CG-only analog/PMSM capabilities remain explicit capabilities and must not be approximated with nondeterministic Linux code on BBB.
 
+# Track C — Zynq-7010 / AX7010 FPGA-Lite HIL
+
+## C0 — AX7010 board bring-up
+
+**Goal:** establish XC7Z010 board clocking, safe-state behavior, exact J10/J11
+constraints and reproducible Vivado project generation.
+
+Implemented baseline:
+
+- [x] AX7010 selected as the first XC7Z010 HIL board;
+- [x] 50 MHz U18 PL clock -> 100 MHz HIL clock;
+- [x] J10 DUT-input / J11 stimulus-output split;
+- [x] FORCE_SAFE default and 3.3 V electrical boundary;
+- [x] Vivado Tcl project/bitstream flow;
+- [x] static constraint-integrity gate.
+
+Physical exit criteria:
+
+- [ ] build timing/DRC/utilization with the intended Vivado toolchain;
+- [ ] program AX7010 and verify clock/status LEDs;
+- [ ] measure FORCE_SAFE behavior on physical outputs;
+- [ ] record board revision and connector adapter revision.
+
+## C1 — parallel PWM generation + capture
+
+**Goal:** use PL parallelism for six-channel servo PWM stimulus and measurement.
+
+Implemented baseline:
+
+- [x] configurable complementary PWM generator;
+- [x] three generated high/low pairs in the AX7010 top;
+- [x] reuse of period/high/low capture;
+- [x] complementary dead-time and overlap monitoring;
+- [x] loopback simulation gate.
+
+Physical exit criteria:
+
+- [ ] 20 kHz three-phase complementary PWM verified on J11;
+- [ ] generated dead time compared with oscilloscope;
+- [ ] J11 -> J10 loopback capture verified;
+- [ ] sustained DUT six-PWM capture characterized.
+
+## C2 — encoder generation + capture
+
+**Goal:** emulate and acquire common servo encoder interfaces.
+
+Implemented baseline:
+
+- [x] ABZ generator;
+- [x] x4 ABZ decoder/capture with illegal-transition latch;
+- [x] SSI-style encoder emulator;
+- [x] SSI-style master capture;
+- [x] existing SPI mode-0 sensor/encoder emulator is reusable.
+
+Next extensions:
+
+- [ ] BiSS-C frame/CRC implementation and fault injection;
+- [ ] configurable SSI parity/status framing;
+- [ ] SPI master capture for selected encoder IC protocols;
+- [ ] RS-422 adapter for differential ABZ/clock/data.
+
+## C3 — deterministic signal fault injection
+
+**Goal:** combine generated PWM/encoder links with timestamped digital faults.
+
+Scope:
+
+- encoder stuck/drop/extra transition;
+- SSI/BiSS CRC/status/timeout faults;
+- PWM missing pulse/overlap/dead-time violation;
+- protected enable/fault/limit/brake-feedback signals;
+- trigger/capture evidence compatible with common pytest semantics.
+
+## C4 — single-motor PMSM-lite HIL
+
+**Goal:** execute a resource-bounded fixed-step single-motor model on XC7Z010.
+
+Implemented baseline:
+
+- [x] synthesizable Q16.16 averaged dq electrical/mechanical plant;
+- [x] configurable discrete-time gains;
+- [x] plant simulation regression.
+
+Required before calling C4 closed-loop:
+
+- [ ] PWM duty -> inverter voltage reconstruction;
+- [ ] electrical angle transform/CORDIC or LUT path;
+- [ ] current/angle feedback mapping to real DUT interfaces;
+- [ ] coefficient generator from physical Rs/Ld/Lq/psi/J/B/Ts parameters;
+- [ ] saturation/overflow instrumentation;
+- [ ] 20 kHz real-controller closed-loop qualification.
+
+## C5 — PS/AXI control + pytest backend
+
+**Goal:** use Cortex-A9/Linux as the control plane while PL remains the real-time
+data plane.
+
+Scope:
+
+- AXI-Lite configuration/status registers;
+- BRAM/FIFO event buffers;
+- timestamped apply/ack semantics;
+- host capability discovery;
+- common pytest backend integration;
+- result/report artifacts.
+
+Zybo(7010) becomes a secondary constraints target after the AX7010 electrical
+and timing baseline is qualified.
+
 # Convergence rules
 
 1. **ZU2CG remains the reference Full-HIL implementation.**
 2. **BBB is digital-only unless a later design explicitly expands it.**
-3. Host tests specify capabilities, not board names.
+3. Host tests specify capabilities, not board names; AX7010 and future Zybo targets share FPGA-Lite semantics.
 4. Raw hardware time is represented as ticks plus clock metadata; conversion does not hide quantization.
 5. Linux is the control plane. Time-critical capture/generation/scheduling stays in FPGA PL or PRU.
 6. Unsupported capabilities fail/skip explicitly; they are never silently emulated with ordinary Linux GPIO timing.
@@ -214,3 +324,15 @@ B0 PRU bring-up
 ```
 
 Neither lane is a prerequisite for abandoning or pausing the other.
+
+
+**Zynq-7010 lane**
+
+```text
+C0 AX7010 bring-up
+   -> C1 PWM gen/capture
+   -> C2 encoder gen/capture
+   -> C3 digital faults
+   -> C4 single-motor PMSM-lite
+   -> C5 PS/AXI + pytest backend
+```

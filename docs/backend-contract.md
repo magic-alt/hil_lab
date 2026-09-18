@@ -17,7 +17,7 @@ It is intentionally smaller than any one hardware backend.
 
 Every backend should expose:
 
-- backend type: e.g. `zynq_axu2cgb` or `bbb_pru`;
+- backend type: e.g. `zynq_axu2cgb`, `zynq7010_ax7010` or `bbb_pru`;
 - hardware revision;
 - FPGA bitstream / PRU firmware revision;
 - protocol/API version;
@@ -32,10 +32,15 @@ Suggested capability identifiers:
 
 - `timebase`
 - `pwm_capture`
+- `pwm_generator`
 - `pwm_complementary_monitor`
 - `abz_generator`
+- `abz_capture`
+- `ssi_sensor_emulator`
+- `ssi_sensor_capture`
 - `spi_sensor_emulator`
 - `dio_scheduler`
+- `pmsm_plant_lite`
 - `dac_feedback`
 - `pmsm_plant`
 
@@ -130,3 +135,14 @@ Host code should distinguish:
 - DUT test failure.
 
 This distinction is required before unattended G5 Servo CI is considered complete.
+
+
+## FPGA-Lite capability boundary
+
+The Zynq-7010/AX7010 backend may expose `pmsm_plant_lite` separately from
+the ZU2CG `pmsm_plant` capability. Tests must not assume those models have
+the same numerical fidelity, analog-I/O bandwidth or multi-axis capacity.
+
+Encoder protocols are also capability-specific. Plain SSI support must not be
+reported as BiSS-C support unless BiSS framing, CRC and timing semantics are
+implemented and qualified.
