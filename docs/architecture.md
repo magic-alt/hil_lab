@@ -1,103 +1,152 @@
-# Architecture — Generation 1 Signal-Level Controller HIL
+# Architecture — Multi-Backend Signal-Level Servo HIL
 
 ## Objective
 
-Generation 1 validates servo-controller firmware while the real inverter power stage and motor are absent from the control loop.
+`hil_lab` validates servo-controller firmware while keeping high-energy inverter/motor behavior outside the first-generation bench.
 
-The platform observes digital commands from the DUT and emulates low-voltage feedback interfaces. It is intentionally not a power HIL.
+The architecture now separates:
 
-## Layering
+- **host/test semantics**;
+- **real-time backend implementations**;
+- **electrical DUT adaptation**.
+
+This permits a ZU2CG FPGA Full-HIL backend and a BeagleBone Black PRU Digital-HIL backend to coexist without forcing either platform into the other's implementation model.
+
+## System layering
 
 ```text
-Host / future test orchestrator
-        |
-        | future Ethernet / RPC / register control
-        v
-+---------------------------------------+
-| ZU2CG / Zynq programmable logic       |
-|                                       |
-|  timebase                             |
-|      |                                |
-|      +--> PWM capture / deadtime      |
-|      +--> encoder emulation           |
-|      +--> SPI sensor emulation        |
-|      +--> deterministic DIO events    |
-+------------------+--------------------+
-                   |
-                   | FPGA-safe digital boundary
-                   v
-+---------------------------------------+
-| HIL I/O / DUT adapter                 |
-| level shift / isolation / clamp       |
-| future DAC + ADC                      |
-+------------------+--------------------+
-                   |
-                   v
-+---------------------------------------+
-| Servo controller DUT                  |
-| MCU / gate-driver logic / comms       |
-+---------------------------------------+
++-------------------------------------------------------------+
+| Host / pytest / future Servo CI                             |
+| test intent, limits, reports, DUT lifecycle                 |
++-----------------------------+-------------------------------+
+                              |
+                              | common backend contract
+                              | capabilities + commands + events
+                              v
+              +---------------+----------------+
+              |                                |
+              v                                v
++-----------------------------+   +-----------------------------+
+| ZU2CG / AXU2CGB backend     |   | BBB / AM3358 PRU backend   |
+|                             |   |                             |
+| FPGA timebase               |   | PRU-local timestamp         |
+| PWM/dead-time capture       |   | PWM/dead-time capture       |
+| ABZ/SPI emulation           |   | ABZ generation              |
+| deterministic DIO           |   | deterministic fault GPIO    |
+| DAC/analog feedback         |   | digital-only first scope    |
+| PMSM plant (G2+)            |   |                             |
++--------------+--------------+   +--------------+--------------+
+               |                                 |
+               +---------------+-----------------+
+                               |
+                               v
++-------------------------------------------------------------+
+| Protected HIL I/O / DUT adapter                             |
+| level shift / differential drivers / isolation / clamps     |
+| analog switches / relays only where reviewed                |
++-----------------------------+-------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+| Servo controller DUT: GD32/HPM MCU + low-voltage interfaces |
++-------------------------------------------------------------+
 ```
 
-## Timing model
+## Control plane vs real-time data plane
 
-The reusable G0 RTL uses one FPGA reference clock. External DUT signals are asynchronous to this clock and are synchronized before ordinary edge processing.
+Linux owns the **control plane**:
 
-This gives deterministic sampled measurements, not analog-time metrology. At a 100 MHz reference clock, one timestamp tick is 10 ns. Synchronizer latency shifts absolute edge timestamps, while differences between equally synchronized edges retain clock-tick measurement resolution.
+- configure tests;
+- load parameters;
+- arm events;
+- collect measurements;
+- write reports;
+- manage DUT lifecycle.
 
-PWM interval outputs are 32-bit clock-tick values. Intervals longer than `0xffffffff` ticks saturate at `0xffffffff` rather than wrapping silently.
+FPGA PL or PRU owns the **real-time data plane**:
 
-For later sub-clock or very-high-precision timing, dedicated input capture resources or vendor-specific primitives may be introduced under `boards/` without changing the core measurement interface.
+- edge capture;
+- interval measurement;
+- encoder transition generation;
+- timestamped GPIO events;
+- other deterministic operations.
 
-## Modules
+A backend must never implement a nominally deterministic capability with ordinary Linux userspace timing merely to satisfy the common API.
 
-### `hil_timebase`
+## Timing contract
 
-Free-running timestamp counter shared by measurement and event blocks.
+The common contract represents hardware time as:
 
-### `pwm_capture`
+- a raw monotonic tick counter;
+- a declared tick frequency;
+- explicit counter width/rollover behavior.
 
-Captures rising/falling edges of one asynchronous PWM input and reports:
+Host software may convert ticks to SI time, but raw timing evidence must remain available.
 
-- period ticks;
-- high ticks;
-- low ticks;
-- edge timestamps;
-- one-cycle valid pulses.
+The ZU2CG G0 reference uses a 100 MHz FPGA clock (10 ns/tick).
 
-### `pwm_complementary_monitor`
+The BBB PRU time source is selected and physically characterized in B0 (#11). Its exact timer implementation must not be assumed by host tests before B0 freezes it.
 
-Monitors a high/low complementary pair and reports both dead-time directions. It latches:
+Cross-backend tests compare semantic quantities and declared tolerances; they do not assume identical quantization.
 
-- high-and-low simultaneous assertion;
-- dead-time below a programmable minimum.
+## ZU2CG backend
 
-### `abz_encoder_emulator`
+The FPGA backend remains the Full-HIL reference.
 
-Generates deterministic quadrature A/B transitions and an index pulse from a configured step period/direction.
+Reusable blocks include:
 
-### `spi_encoder_emulator`
+- `hil_timebase`;
+- `pwm_capture`;
+- `pwm_complementary_monitor`;
+- `abz_encoder_emulator`;
+- `spi_encoder_emulator`;
+- `dio_event_scheduler`.
 
-G0 SPI mode-0 slave emulator. It serializes a supplied frame MSB-first, captures the DUT MOSI frame, and can XOR a deterministic fault mask into the transmitted frame.
+Board-specific clocking, pins and future analog interfaces stay under `boards/zu2cg/`.
 
-The FPGA reference clock must substantially oversample SCLK. Exact supported SCLK limits are a board-integration validation item.
+G1+ extends this backend with deterministic DAC output, then PMSM and robotic-joint plant models.
 
-### `dio_event_scheduler`
+## BBB PRU backend
 
-Holds one pending event. At or after a specified FPGA timestamp, a masked set of digital outputs is updated atomically.
+BBB is a companion backend optimized for fast digital servo-firmware testing.
 
-This is the seed for later fault-injection and deterministic stimulus sequencing.
+Initial responsibilities:
+
+- B0: PRU lifecycle/transport/timebase/safe-state;
+- B1: PWM and dead-time capture;
+- B2: ABZ output;
+- B3: deterministic digital fault/stimulus scheduling.
+
+A reference partition may use one PRU primarily for capture and the other primarily for generation/events, but B0 measurements decide the final partition. Do not freeze the split before resource/timing characterization.
+
+BBB does not initially implement:
+
+- analog sensor synthesis;
+- PMSM plant execution;
+- custom ADC/DAC HIL;
+- a replacement for G2/G3/G6.
+
+## Backend capability model
+
+See `docs/backend-contract.md`.
+
+Tests should request capabilities such as PWM capture or ABZ generation. A backend that does not support a required capability must return an explicit unsupported result so pytest can skip/fail with a clear reason.
 
 ## Communications boundary
 
-Generation 1 also needs DUT communications, but CAN/CAN FD, RS-485 and EtherCAT are intentionally kept out of the reusable timing core until their physical/transceiver and protocol ownership are fixed. They belong behind board-specific adapters or host/controller interfaces, while the PL exposes deterministic timestamp/event primitives to them.
+CAN/CAN FD, RS-485 and EtherCAT remain outside the reusable real-time cores until physical/transceiver ownership is fixed.
 
-The G0 tracking issue owns the first communication-interface seam and hardware loopback definition. A full EtherCAT master is not a reusable-PL requirement.
+An external communications host can participate in a HIL scenario. For example, a Raspberry Pi running an EtherCAT master may command the servo DUT while ZU2CG/BBB observes or injects signal-level behavior. This does not require an EtherCAT master implementation inside FPGA PL or PRU.
 
-## Explicit non-goals of G0
+## Safety invariant
 
-- PMSM equations in RTL;
-- analog sensor synthesis;
-- high-energy short/open fault injection;
-- EtherCAT master implementation inside the reusable core;
-- vendor-specific AXI or PS software as a prerequisite for core simulation.
+Every backend must have a local safe state independent of host responsiveness.
+
+Examples:
+
+- disable external analog-output enable;
+- drive encoder/fault outputs to documented benign states;
+- clear scheduled events on reset unless explicitly persisted;
+- use a watchdog for host-controlled potentially active stimulus.
+
+High-energy power nodes remain out of scope.

@@ -2,133 +2,146 @@
 
 `hil_lab` is a signal-level hardware-in-the-loop (HIL) and automated-test platform for servo drives and robotic actuators.
 
-The first generation intentionally stays on the **controller signal side**. It validates firmware and digital interfaces without connecting the FPGA platform to the 48 V power stage or reproducing destructive power faults.
+The project now has **two cooperating real-time backends**:
 
-## Current milestone: G0 — ZU2CG Digital HIL
+- **Track A — ZU2CG / AXU2CGB Full HIL (primary):** FPGA digital timing, DAC/analog feedback, PMSM plant, custom ADC/DAC hardware and later robotic-joint models.
+- **Track B — BeagleBone Black / AM3358 PRU Digital HIL (companion):** fast PWM measurement, ABZ generation, deterministic digital fault/stimulus I/O and rapid servo-firmware regression.
 
-The current RTL baseline is synthesizable **Verilog-2001** and targets the programmable logic (PL) of Zynq / Zynq UltraScale+ MPSoC boards, with ZU2CG as the primary reference target.
+BBB does **not** replace the Zynq MPSoC roadmap. It gives the repository a low-cost, quickly deployable digital-HIL target while ZU2CG continues toward the full closed-loop plant.
 
-Implemented in the first baseline:
+## Current development state
 
-- free-running FPGA timestamp/timebase;
-- PWM period/high/low measurement;
-- complementary PWM dead-time measurement;
-- shoot-through-command and dead-time-violation latching;
-- ABZ quadrature encoder emulation;
-- SPI mode-0 sensor/encoder frame emulation with deterministic bit-flip injection;
-- timestamped digital-output event scheduling;
-- a reusable `hil_digital_core` integration top;
-- RTL policy checks, Icarus Verilog smoke simulation, Verilator lint and GitHub Actions CI;
-- AI coding rules and contribution conventions.
+### ZU2CG / AXU2CGB
 
-Not implemented yet:
+G0 reusable RTL and the physical AXU2CGB board integration are in place:
 
-- analog current/voltage feedback generation;
-- PMSM/inverter plant model;
-- ADC/DAC carrier board;
-- electrical fault-insertion hardware;
-- host-side HIL regression framework;
-- harmonic/planetary/linear actuator mechanical models.
+- FPGA timebase;
+- PWM period/high/low capture;
+- complementary PWM dead-time monitoring;
+- overlap/minimum-dead-time fault latching;
+- ABZ encoder emulation;
+- SPI mode-0 sensor/encoder emulation;
+- timestamped DIO event scheduling;
+- exact AXU2CGB clock/pin integration and reproducible Vivado Tcl flow;
+- Icarus/Verilator/GitHub Actions verification.
 
-Those capabilities are deliberately staged in [`ROADMAP.md`](ROADMAP.md).
+Physical G0 validation against the actual AXU2CGB and servo DUT remains open in #1.
+
+G1 analog feedback is tracked in #3 / PR #10 using two AD3542R evaluation DACs. RTL and CI work are implemented; level-shifter/interposer and physical analog characterization remain required.
+
+### BeagleBone Black / PRU
+
+The new companion track is split into:
+
+- **B0 #11** — PRU platform, host transport, timestamp and safe-state bring-up;
+- **B1 #12** — PRU PWM capture + complementary dead-time monitor;
+- **B2 #13** — PRU ABZ encoder generator;
+- **B3 #14** — deterministic fault/stimulus GPIO scheduler;
+- **B4 #15** — common HIL backend API + cross-target pytest conformance.
+
+## Architecture
+
+```text
+                    host / pytest / Servo CI
+                             |
+                    common HIL contract
+                 capability + time + events
+                    /                   \
+                   /                     \
+        ZU2CG / AXU2CGB               BBB / AM3358
+        Full-HIL backend              PRU digital backend
+        ----------------              -------------------
+        FPGA timebase                 PRU timestamp
+        PWM capture                   PWM capture
+        ABZ/SPI emulation             ABZ generation
+        deterministic DIO             fault/stimulus GPIO
+        DAC / analog feedback         digital only
+        PMSM plant (future)           no PMSM requirement
+                |                           |
+                +------------+--------------+
+                             |
+                     protected DUT adapter
+                             |
+                      GD32/HPM servo DUT
+```
+
+Cross-platform reuse is at the **semantic contract and test layer**. FPGA RTL and PRU firmware remain platform-specific where that produces the most deterministic implementation.
 
 ## Safety boundary
 
-Generation 1 is a **Signal-Level Controller HIL**.
+Generation 1 remains a **Signal-Level Controller HIL**.
 
-```text
-Servo DUT                              ZU2CG PL
-┌────────────────────┐                ┌──────────────────────────┐
-│ PWM UH/UL/VH/VL/   ├───────────────►│ capture / monitor        │
-│ WH/WL              │                │                          │
-│                    │                │ timestamp / scheduler    │
-│ Encoder A/B/Z      │◄───────────────┤ encoder emulator         │
-│                    │                │                          │
-│ SPI SCLK/CS/MOSI   ├───────────────►│ SPI sensor emulator      │
-│ SPI MISO           │◄───────────────┤                          │
-│                    │                │                          │
-│ DIO / fault / en   │◄──────────────►│ digital I/O              │
-└────────────────────┘                └──────────────────────────┘
+Do not connect FPGA or BBB headers directly to:
 
-Future analog path:
-ZU2CG PL -> DAC/AFE -> DUT ADC inputs (Ia/Ib/Ic/Vbus/Torque/...)
-```
+- the 48 V DC bus;
+- motor phases;
+- MOSFET drain/source nodes;
+- 24/48 V brake power;
+- destructive short/open fault paths.
 
-The FPGA header must **not** be connected directly to gate-driver power nodes, motor phases, DC bus voltage, or other high-energy nets. Board-specific isolation, level shifting, clamping and current limiting belong on the HIL I/O hardware.
+Voltage translation, differential drivers, isolation, clamping, current limiting, analog switches and relays belong in reviewed adapters.
+
+A host crash or communication loss must never leave a hazardous stimulus asserted. Real-time backends own their local safe-state behavior.
 
 ## Repository layout
 
 ```text
 hil_lab/
-├── rtl/
-│   ├── common/       CDC helpers
-│   ├── time/         FPGA timestamp
-│   ├── pwm/          PWM capture / complementary monitor
-│   ├── encoder/      ABZ and SPI encoder emulators
-│   ├── io/           deterministic digital event engine
-│   └── top/          reusable Digital HIL top
-├── sim/              self-checking Verilog testbenches
-├── tools/            repository and RTL policy checks
-├── boards/zu2cg/     board-integration contract and future constraints
-├── docs/             architecture and interface documents
-├── .github/          CI and contribution templates
-├── AGENTS.md         AI coding contract
-├── Makefile          local verification entry point
-└── ROADMAP.md        staged product roadmap
+├── rtl/                         reusable Zynq/FPGA Verilog-2001 RTL
+├── sim/                         self-checking FPGA simulations
+├── boards/
+│   ├── zu2cg/                   AXU2CGB board integration
+│   └── beaglebone_black/        PRU backend board contract / future firmware
+├── docs/
+│   ├── architecture.md
+│   ├── backend-contract.md      shared behavioral contract
+│   ├── io-contract.md
+│   └── testing.md
+├── tools/
+├── .github/
+├── AGENTS.md
+├── Makefile
+└── ROADMAP.md
 ```
 
-## Local verification
+## Verification
 
-Required tools on Ubuntu/WSL2:
+Current FPGA gates:
 
 ```bash
 sudo apt-get install iverilog verilator make python3
-```
-
-Run all current gates:
-
-```bash
 make verify
 ```
 
-Or run them individually:
+The BBB track will add its own PRU build/unit/loopback gates without weakening or replacing `make verify`.
 
-```bash
-make policy
-make compile
-make test
-make lint
-```
+Hardware evidence must always record:
 
-Waveforms generated by the smoke tests are written under `build/`.
-
-## RTL rules
-
-The synthesizable FPGA core follows these constraints:
-
-- Verilog-2001 only (`.v`); no SystemVerilog RTL;
-- no HLS-generated RTL in the reusable core;
-- one clock domain for the initial reusable core;
-- asynchronous external inputs enter through explicit synchronizers;
-- no gated clocks;
-- no inferred latches;
-- non-blocking assignments in sequential processes;
-- no vendor primitives inside reusable RTL;
-- physical I/O and vendor-specific wrappers live under `boards/`;
-- parameters exposed in clock ticks unless the interface explicitly states otherwise.
-
-See [`AGENTS.md`](AGENTS.md) for the coding contract used by AI coding tools and contributors.
+- HIL backend and board revision;
+- FPGA bitstream or PRU firmware revision;
+- DUT hardware revision;
+- DUT firmware commit;
+- adapter/wiring revision;
+- timestamp clock/tick definition.
 
 ## Development direction
 
-The project follows this order:
+### Track A — Full HIL
 
-1. **ZU2CG FPGA Digital HIL**
-2. **4/8-channel DAC integration**
-3. **PMSM closed-loop HIL**
-4. **8-channel ADC/DAC HIL PCB**
-5. **Fault Injection Unit**
-6. **Automated pytest/CI regression system**
-7. **Dual-inertia robotic-joint model**
+1. G0 ZU2CG Digital HIL physical qualification
+2. G1 AD3542R 4-channel analog evaluation
+3. G2 PMSM closed-loop HIL
+4. G3 custom 8-channel ADC/DAC HIL PCB
+5. G4 complete signal-level Fault Injection Unit
+6. G5 unattended pytest/CI Servo HIL
+7. G6 dual-inertia robotic-joint model
 
-The repository should remain useful at every gate; later stages must extend the existing interfaces rather than replacing them with one-off test code.
+### Track B — fast digital HIL
+
+1. B0 BBB PRU bring-up
+2. B1 PWM/dead-time capture
+3. B2 ABZ generator
+4. B3 deterministic digital fault/stimulus scheduler
+5. B4 common backend API and conformance tests
+
+The two tracks converge in G5/B4. New tests should target the common HIL semantics when possible and declare required capabilities explicitly.
