@@ -14,7 +14,7 @@ protocol-test:
 	PYTHONPATH=$(HOST_DIR) $(PYTHON) -m unittest -v $(HOST_DIR)/test_hil_pru_protocol.py
 
 shell-check:
-	bash -n pinmux/setup_b0_loopback.sh
+	sh -n pinmux/setup_b0_loopback.sh
 
 env:
 	$(MAKE) -C $(PRU0_DIR) env
