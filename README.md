@@ -2,12 +2,13 @@
 
 `hil_lab` is a signal-level hardware-in-the-loop (HIL) and automated-test platform for servo drives and robotic actuators.
 
-The project now has **two cooperating real-time backends**:
+The project now has **three cooperating real-time backends**:
 
 - **Track A — ZU2CG / AXU2CGB Full HIL (primary):** FPGA digital timing, DAC/analog feedback, PMSM plant, custom ADC/DAC hardware and later robotic-joint models.
 - **Track B — BeagleBone Black / AM3358 PRU Digital HIL (companion):** fast PWM measurement, ABZ generation, deterministic digital fault/stimulus I/O and rapid servo-firmware regression.
+- **Track C — Zynq-7010 / AX7010 FPGA-Lite HIL:** low-cost parallel FPGA signal HIL, PWM generation/capture, encoder generation/capture and a resource-bounded single-motor plant.
 
-BBB does **not** replace the Zynq MPSoC roadmap. It gives the repository a low-cost, quickly deployable digital-HIL target while ZU2CG continues toward the full closed-loop plant.
+BBB and Zynq-7010 do **not** replace the Zynq MPSoC roadmap. They provide lower-cost deterministic test targets while ZU2CG continues toward the full closed-loop multi-axis plant.
 
 ## Current development state
 
@@ -28,6 +29,21 @@ G0 reusable RTL and the physical AXU2CGB board integration are in place:
 Physical G0 validation against the actual AXU2CGB and servo DUT remains open in #1.
 
 G1 analog feedback is tracked in #3 / PR #10 using two AD3542R evaluation DACs. RTL and CI work are implemented; level-shifter/interposer and physical analog characterization remain required.
+
+### Zynq-7010 / AX7010 FPGA-Lite
+
+The AX7010 target is the first Track C board because its two 40-pin PL expansion
+headers expose enough direct 3.3 V I/O for simultaneous six-PWM, ABZ, SSI,
+fault/status and future ADC/DAC control. The current baseline adds:
+
+- complementary PWM generation plus existing PWM/dead-time capture;
+- ABZ generation and x4 quadrature capture;
+- SSI-style encoder emulation and master capture;
+- reusable SPI encoder emulation from the common RTL;
+- a fixed-step Q16.16 PMSM-lite dq model for single-motor experiments;
+- exact AX7010 J10/J11 constraints and a reproducible Vivado flow.
+
+See `boards/zynq7010/README.md`.
 
 ### BeagleBone Black / PRU
 
@@ -91,6 +107,7 @@ hil_lab/
 ├── sim/                         self-checking FPGA simulations
 ├── boards/
 │   ├── zu2cg/                   AXU2CGB board integration
+│   ├── zynq7010/                AX7010 FPGA-Lite HIL backend
 │   ├── beaglebone_black/        PRU digital-HIL backend
 │   └── stm32f429i_disc1/        Keil MDK multi-target 20 kHz PWM stimulus
 ├── docs/
@@ -114,7 +131,7 @@ sudo apt-get install iverilog verilator make python3
 make verify
 ```
 
-`make verify` also checks the BBB host/core contracts and the STM32F429I-DISC1 PWM stimulus configuration. Real PRU and STM32 cross-compilation remain explicit hardware/toolchain steps.
+`make verify` also checks the AX7010 FPGA-Lite RTL/constraints/tests, BBB host/core contracts and the STM32F429I-DISC1 PWM stimulus configuration. Real Vivado bitstream builds, PRU builds and STM32 cross-compilation remain explicit hardware/toolchain steps.
 
 Hardware evidence must always record:
 
@@ -146,3 +163,19 @@ Hardware evidence must always record:
 5. B4 common backend API and conformance tests
 
 The two tracks converge in G5/B4. New tests should target the common HIL semantics when possible and declare required capabilities explicitly.
+
+
+### Track C — FPGA-Lite HIL
+
+The Zynq-7010 lane provides a resource-bounded FPGA target between BBB PRU and
+ZU2CG Full-HIL:
+
+1. AX7010 board/clock/constraint bring-up;
+2. parallel PWM generation and capture;
+3. ABZ + SSI/SPI encoder generation/capture;
+4. deterministic signal fault injection;
+5. fixed-step single-motor PMSM-lite plant;
+6. PS/AXI control and shared pytest backend integration.
+
+The first target is AX7010. Zybo(7010) support should reuse the same cores and
+add only board-specific clock/pin/electrical integration where possible.
