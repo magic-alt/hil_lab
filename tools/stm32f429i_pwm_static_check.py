@@ -16,6 +16,7 @@ STARTUP = BASE / "Startup/startup_stm32f429xx.s"
 PROJECT = BASE / "MDK-ARM/hil_pwm_stimulus.uvprojx"
 README = BASE / "README.md"
 BUILD_ALL = BASE / "MDK-ARM/build_all.bat"
+SCATTER = BASE / "MDK-ARM/stm32f429_flash.sct"
 
 EXPECTED_TARGETS = {
     "20k_50_600ns": (500, 600, 1),
@@ -77,7 +78,7 @@ def parse_defines(raw: str) -> dict[str, str]:
 def main() -> int:
     errors: list[str] = []
 
-    for path in (PROFILE, REGS, MAIN, SYSTEM, STARTUP, PROJECT, README, BUILD_ALL):
+    for path in (PROFILE, REGS, MAIN, SYSTEM, STARTUP, PROJECT, README, BUILD_ALL, SCATTER):
         if not path.is_file():
             errors.append(f"missing required Keil project file: {path.relative_to(ROOT)}")
     if errors:
@@ -92,6 +93,7 @@ def main() -> int:
     startup = STARTUP.read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
     build_all = BUILD_ALL.read_text(encoding="utf-8")
+    scatter = SCATTER.read_text(encoding="utf-8")
 
     if (BASE / "platformio.ini").exists():
         errors.append("PlatformIO project must not exist; Keil MDK is authoritative")
@@ -167,6 +169,8 @@ def main() -> int:
             clang_as = target.findtext("./TargetOption/TargetArmAds/Aads/ClangAsOpt", default="")
             output = target.findtext("./TargetOption/TargetCommonOption/OutputDirectory", default="")
             hex_enable = target.findtext("./TargetOption/TargetCommonOption/CreateHexFile", default="")
+            use_scatter = target.findtext("./TargetOption/TargetArmAds/LDads/useFile", default="")
+            scatter_file = target.findtext("./TargetOption/TargetArmAds/LDads/ScatterFile", default="")
             defines_raw = target.findtext(
                 "./TargetOption/TargetArmAds/Cads/VariousControls/Define",
                 default="",
@@ -185,6 +189,10 @@ def main() -> int:
                 errors.append(f"{name}: output directory is not target-specific")
             if hex_enable != "1":
                 errors.append(f"{name}: HEX output is disabled")
+            if use_scatter != "1":
+                errors.append(f"{name}: explicit scatter file is not enabled")
+            if scatter_file != r".\\stm32f429_flash.sct":
+                errors.append(f"{name}: wrong scatter file {scatter_file!r}")
 
             expected_defs = {
                 "PWM_FREQUENCY_HZ": "20000UL",
@@ -232,6 +240,7 @@ def main() -> int:
 
     print("STM32F429I-DISC1 Keil PWM stimulus checks: PASS")
     print("  project: MDK-ARM/hil_pwm_stimulus.uvprojx")
+    print("  linker: explicit stm32f429_flash.sct (Flash RO + SRAM RW/ZI)")
     print("  targets:", ", ".join(EXPECTED_TARGETS))
     print("  20 kHz: ARR=8999, CCR1=4500")
     print("  dead-time: 600ns=0x6c, 700ns=0x7e, 800ns=0x88")
