@@ -19,18 +19,12 @@
 #define PWM_PROFILE_ID        (0UL)
 #endif
 
-#define HIL_SYSCLK_HZ         (180000000UL)
-#define HIL_APB2_TIMER_HZ     (180000000UL)
-#define HIL_PWM_PERIOD_TICKS  (HIL_APB2_TIMER_HZ / PWM_FREQUENCY_HZ)
-#define HIL_PWM_ARR           (HIL_PWM_PERIOD_TICKS - 1UL)
-#define HIL_PWM_CCR1          ((HIL_PWM_PERIOD_TICKS * PWM_DUTY_PERMILLE) / 1000UL)
+#define HIL_PLL_SYSCLK_HZ     (180000000UL)
+#define HIL_HSI_HZ            (16000000UL)
+#define HIL_HSE_MCO_HZ        (8000000UL)
 
 #if PWM_FREQUENCY_HZ == 0
 #error "PWM_FREQUENCY_HZ must be > 0"
-#endif
-
-#if (HIL_APB2_TIMER_HZ % PWM_FREQUENCY_HZ) != 0
-#error "PWM_FREQUENCY_HZ must divide the 180 MHz TIM8 clock exactly"
 #endif
 
 #if (PWM_DUTY_PERMILLE == 0) || (PWM_DUTY_PERMILLE >= 1000)
