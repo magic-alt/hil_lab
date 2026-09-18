@@ -41,6 +41,9 @@ def main() -> int:
     require(firmware, r"force_safe\(\)", "safe-state invocation", errors)
     require(resource, r"\.resource_table", "remoteproc resource table section", errors)
     require(resource, r"VIRTIO_ID_RPMSG", "RPMsg vdev", errors)
+    resource_header = (ROOT / "boards/beaglebone_black/firmware/pru0_b0/resource_table_0.h").read_text(encoding="utf-8")
+    require(resource_header, r"PRU_RPMSG_VQ0_SIZE\\s+\\(16u\\)", "RPMsg vring0 size", errors)
+    require(resource_header, r"RPMSG_PRU_C0_FEATURES", "RPMsg name-service feature", errors)
 
     if errors:
         for error in errors:
