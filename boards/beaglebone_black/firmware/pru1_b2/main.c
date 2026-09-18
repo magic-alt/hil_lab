@@ -379,11 +379,15 @@ void main(void)
                 last_apply_ticks = now;
 
                 /*
-                 * Phase-locked schedule: do not derive the next deadline from
-                 * the delayed actual apply time. late_transition_count exposes
-                 * missed-rate operation for characterization.
+                 * Keep phase lock for ordinary sub-period jitter. If a whole
+                 * transition period was missed (for example due to RPMsg),
+                 * count it and resynchronize instead of emitting a burst of
+                 * compressed catch-up transitions.
                  */
-                next_transition_ticks += transition_ticks;
+                if (lateness >= transition_ticks)
+                    next_transition_ticks = now + transition_ticks;
+                else
+                    next_transition_ticks += transition_ticks;
                 continue;
             }
         }
