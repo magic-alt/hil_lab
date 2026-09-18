@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 if ! command -v config-pin >/dev/null 2>&1; then
   echo "ERROR: config-pin not found; use a BeagleBoard Debian image with cape-universal support" >&2
@@ -13,6 +13,7 @@ config-pin P9_29 pruin
 echo "B0 loopback pinmux configured:"
 config-pin -q P9_31
 config-pin -q P9_29
+
 cat <<'MSG'
 Connect a short jumper:
   P9_31 (PRU0 R30 bit 0, output) -> P9_29 (PRU0 R31 bit 1, input)
