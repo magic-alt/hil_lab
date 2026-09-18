@@ -78,6 +78,7 @@
 #define RCC_CFGR_PPRE1_MASK (7UL << 10)
 #define RCC_CFGR_PPRE2_MASK (7UL << 13)
 #define RCC_CFGR_SWS_MASK   (3UL << 2)
+#define RCC_CFGR_SWS_HSI    (0UL << 2)
 #define RCC_CFGR_SWS_PLL    (2UL << 2)
 #define RCC_CFGR_PPRE1_DIV4 (5UL << 10)
 #define RCC_CFGR_PPRE2_DIV2 (4UL << 13)
