@@ -6,12 +6,23 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Vendor = Join-Path $Root "Vendor"
 
 function Copy-Unique([string]$Name, [string]$Destination) {
-  $matches = Get-ChildItem -Path $SourceRoot -Recurse -File -Filter $Name
+  $matches = @(Get-ChildItem -Path $SourceRoot -Recurse -File -Filter $Name)
   if ($matches.Count -eq 0) { throw "Missing $Name under $SourceRoot" }
   $selected = $matches | Select-Object -First 1
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
   Copy-Item $selected.FullName (Join-Path $Destination $Name) -Force
   Write-Host ("Copied " + $selected.FullName)
+}
+
+function Copy-ArmStartup([string]$Destination) {
+  $matches = @(Get-ChildItem -Path $SourceRoot -Recurse -File -Filter "startup_gd32h75e.s" |
+      Where-Object { $_.FullName -match "[\\/]Source[\\/]ARM[\\/]" })
+  if ($matches.Count -eq 0) {
+    throw "Missing ARM startup_gd32h75e.s under $SourceRoot"
+  }
+  New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+  Copy-Item $matches[0].FullName (Join-Path $Destination "startup_gd32h75e.s") -Force
+  Write-Host ("Copied " + $matches[0].FullName)
 }
 
 $Cmsis = Join-Path $Vendor "CMSIS"
@@ -32,7 +43,7 @@ foreach ($name in @("core_cm7.h","cmsis_version.h","cmsis_compiler.h","cmsis_arm
 Copy-Unique "gd32h75e.h" $DeviceInc
 Copy-Unique "system_gd32h75e.h" $DeviceInc
 Copy-Unique "system_gd32h75e.c" $DeviceSrc
-Copy-Unique "startup_gd32h75e.s" $DeviceArm
+Copy-ArmStartup $DeviceArm
 
 foreach ($name in @("gd32h75e_gpio.h","gd32h75e_rcu.h","gd32h75e_timer.h")) { Copy-Unique $name $SplInc }
 foreach ($name in @("gd32h75e_gpio.c","gd32h75e_rcu.c","gd32h75e_timer.c")) { Copy-Unique $name $SplSrc }
