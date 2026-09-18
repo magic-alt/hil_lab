@@ -44,8 +44,8 @@ struct hil_b0_resource_table resourceTable = {
         0u
     },
     {
-        TYPE_CUSTOM,
-        TYPE_PRU_INTS,
+        TYPE_POSTLOAD_VENDOR,
+        (PRU_INTS_VER0 | TYPE_PRU_INTS),
         sizeof(struct fw_rsc_custom_ints),
         {
             0x0000u,
