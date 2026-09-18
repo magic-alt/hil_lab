@@ -8,7 +8,7 @@ This gate establishes the minimal deterministic BBB backend before PWM capture, 
 
 - Board: BeagleBone Black / AM3358
 - Real-time core: PRU0
-- Firmware loading: Linux remoteproc
+- Firmware loading: Linux remoteproc (`am335x-pru0-fw` default)
 - Host transport: RPMsg character device, port 30
 - Hardware timebase: PRU IEP, configured for increment 1 at the nominal 200 MHz PRU/IEP clock
 - Counter exposed by B0: 32 bits; host software must handle wrap explicitly
@@ -91,7 +91,7 @@ The script:
 
 1. discovers PRU0 by remoteproc name;
 2. stops it if running;
-3. installs the ELF into `/lib/firmware/hil-b0-pru0-fw`;
+3. installs the ELF into `/lib/firmware/am335x-pru0-fw`;
 4. writes the remoteproc firmware selector;
 5. starts PRU0;
 6. waits for the RPMsg character device.
