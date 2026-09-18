@@ -15,6 +15,6 @@ config-pin -q P9_31
 config-pin -q P9_29
 cat <<'MSG'
 Connect a short jumper:
-  P9_31 (PRU0 R30 bit 0, output) -> P9_29 (PRU0 R31 bit 7, input)
+  P9_31 (PRU0 R30 bit 0, output) -> P9_29 (PRU0 R31 bit 1, input)
 Do not connect these raw pins to 24/48 V or any power-stage node.
 MSG
