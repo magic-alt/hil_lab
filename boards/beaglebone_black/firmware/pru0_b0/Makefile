@@ -1,5 +1,16 @@
 PRU_CGT ?=
-PSSP_DIR ?=
+
+# Prefer an explicitly supplied PSSP_DIR when it is valid, then common
+# BeagleBoard Debian/TI locations. Newer Debian images may not install PSSP by
+# default, so check-env prints the exact clone command when none exists.
+PSSP_REQUESTED := $(strip $(PSSP_DIR))
+PSSP_CANDIDATES := \
+	$(PSSP_REQUESTED) \
+	/usr/lib/ti/pru-software-support-package \
+	$(sort $(wildcard /usr/lib/ti/pru-software-support-package-v*)) \
+	/opt/source/pru-software-support-package \
+	$(HOME)/pru-software-support-package
+PSSP_DIR := $(firstword $(foreach d,$(PSSP_CANDIDATES),$(if $(wildcard $(d)/include/pru_rpmsg.h),$(d))))
 
 GEN_DIR := gen
 TARGET := $(GEN_DIR)/hil_b0_pru0.out
@@ -17,16 +28,36 @@ INCLUDES := --include_path=$(PRU_CGT)/include \
 	--include_path=../common
 LIBS := --library=$(PSSP_DIR)/lib/rpmsg_lib.lib
 
-.PHONY: all clean check-env
+.PHONY: all clean env check-env
 
 all: check-env $(TARGET)
 
+env:
+	@echo "PRU_CGT=$(PRU_CGT)"
+	@echo "PSSP_REQUESTED=$(PSSP_REQUESTED)"
+	@echo "PSSP_DIR=$(PSSP_DIR)"
+	@command -v clpru 2>/dev/null | sed 's/^/clpru(PATH)=/' || true
+	@if [ -n "$(PSSP_DIR)" ]; then \
+		echo "PSSP header=$(PSSP_DIR)/include/pru_rpmsg.h"; \
+		echo "PSSP library=$(PSSP_DIR)/lib/rpmsg_lib.lib"; \
+	fi
+
 check-env:
-	@test -n "$(PRU_CGT)" || (echo "ERROR: set PRU_CGT to TI PRU Code Generation Tools"; exit 2)
-	@test -x "$(PRU_CGT)/bin/clpru" || (echo "ERROR: $(PRU_CGT)/bin/clpru not found"; exit 2)
-	@test -n "$(PSSP_DIR)" || (echo "ERROR: set PSSP_DIR to TI PRU Software Support Package"; exit 2)
-	@test -f "$(PSSP_DIR)/include/pru_rpmsg.h" || (echo "ERROR: pru_rpmsg.h not found under PSSP_DIR"; exit 2)
-	@test -f "$(PSSP_DIR)/lib/rpmsg_lib.lib" || (echo "ERROR: rpmsg_lib.lib not found under PSSP_DIR"; exit 2)
+	@test -n "$(PRU_CGT)" || (echo "ERROR: set PRU_CGT to TI PRU Code Generation Tools (normally /usr/share/ti/cgt-pru)"; exit 2)
+	@test -x "$(PRU_CGT)/bin/clpru" || (echo "ERROR: $(PRU_CGT)/bin/clpru not found"; echo "       On current BeagleBoard Debian try: sudo apt update && sudo apt install ti-pru-cgt-v2.3"; exit 2)
+	@test -n "$(PSSP_DIR)" || ( \
+		echo "ERROR: PRU Software Support Package (PSSP) not found."; \
+		echo "       Expected include/pru_rpmsg.h and lib/rpmsg_lib.lib."; \
+		echo "       Common path: /usr/lib/ti/pru-software-support-package"; \
+		echo "       Install/clone with:"; \
+		echo "         sudo mkdir -p /usr/lib/ti"; \
+		echo "         sudo git clone --depth 1 --branch v6.5.0 https://git.ti.com/git/pru-software-support-package/pru-software-support-package.git /usr/lib/ti/pru-software-support-package"; \
+		echo "       Or export PSSP_DIR=/path/to/pru-software-support-package"; \
+		exit 2)
+	@test -f "$(PSSP_DIR)/include/pru_rpmsg.h" || (echo "ERROR: $(PSSP_DIR)/include/pru_rpmsg.h not found"; exit 2)
+	@test -f "$(PSSP_DIR)/lib/rpmsg_lib.lib" || (echo "ERROR: $(PSSP_DIR)/lib/rpmsg_lib.lib not found"; exit 2)
+	@echo "PRU toolchain: $(PRU_CGT)"
+	@echo "PSSP: $(PSSP_DIR)"
 
 $(TARGET): $(OBJECTS) $(LINKER_COMMAND_FILE)
 	$(PRU_CGT)/bin/clpru $(CFLAGS) -z -i$(PRU_CGT)/lib -i$(PRU_CGT)/include \
