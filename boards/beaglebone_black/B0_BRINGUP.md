@@ -12,7 +12,7 @@ This gate establishes the minimal deterministic BBB backend before PWM capture, 
 - Host transport: RPMsg character device, port 30
 - Hardware timebase: PRU IEP, configured for increment 1 at the nominal 200 MHz PRU/IEP clock
 - Counter exposed by B0: 32 bits; host software must handle wrap explicitly
-- Temporary loopback fixture: P9_31 PRU0 output -> P9_25 PRU0 input
+- Temporary loopback fixture: P9_31 PRU0 output -> P9_29 PRU0 input
 
 The 200 MHz value is the configured/nominal timebase. Physical B0 qualification must measure GPIO command/observation latency and quantization; do not treat 5 ns as guaranteed end-to-end edge accuracy.
 
@@ -75,7 +75,7 @@ sudo ./pinmux/setup_b0_loopback.sh
 Connect only:
 
 ```text
-P9_31 -> P9_25
+P9_31 -> P9_29
 ```
 
 This mapping exists only for B0 timing validation. It is not the frozen GD32/HPM DUT adapter mapping.
@@ -120,7 +120,7 @@ Expected B0 capabilities are:
 
 ## Deterministic GPIO loopback
 
-With the P9_31 -> P9_25 jumper installed:
+With the P9_31 -> P9_29 jumper installed:
 
 ```bash
 python3 hil_pru_cli.py loopback --delay-us 1000 --width-us 1000 --timeout-us 5000
@@ -157,6 +157,6 @@ Repository code can establish the implementation and automated software checks, 
 
 - build/deploy/restart on the target image;
 - RPMsg HELLO/TIME exchange;
-- P9_31 -> P9_25 loopback timestamps;
+- P9_31 -> P9_29 loopback timestamps;
 - logic-analyzer timing comparison;
 - boot/stop/host-loss safe-state behavior.
