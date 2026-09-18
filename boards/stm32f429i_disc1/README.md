@@ -143,18 +143,28 @@ PC6 is also connected to the onboard LCD HSYNC input. This project does not
 initialize LTDC, so there is no MCU output conflict; the onboard display may
 show invalid content while PC6 is used as PWM.
 
-## Clock tree
+## Clock tree and startup fallback
 
-STM32F429I-DISC1 factory routing provides an 8 MHz ST-LINK MCO clock on
-PH0/OSC_IN.
+STM32F429I-DISC1 factory routing can provide an 8 MHz ST-LINK MCO clock on
+PH0/OSC_IN. That route depends on the board solder-bridge configuration, so the
+PWM stimulus no longer treats HSE-MCO as mandatory.
 
-The firmware configures:
+Startup order is:
 
 ```text
-HSE bypass      = 8 MHz
-PLLM            = 8
-PLLN            = 360
-PLLP            = 2
+1. HSI 16 MHz is enabled and kept alive as the recovery clock.
+2. Try ST-LINK MCO / HSE bypass at 8 MHz.
+3. If HSE is ready:
+      HSE 8 MHz -> PLLM=8, PLLN=360, PLLP=2 -> 180 MHz
+4. If HSE is not ready:
+      HSI 16 MHz -> PLLM=16, PLLN=360, PLLP=2 -> 180 MHz
+5. If PLL/OverDrive switching also fails:
+      remain on direct HSI 16 MHz
+```
+
+In either PLL mode:
+
+```text
 SYSCLK          = 180 MHz
 AHB             = 180 MHz
 APB1            = 45 MHz
@@ -162,7 +172,12 @@ APB2            = 90 MHz
 TIM8            = 180 MHz
 ```
 
-Keep the ST-LINK USB connected when using the factory MCO clock path.
+The emergency direct-HSI path still generates 20 kHz PWM, but TIM8 then runs at
+16 MHz, dead-time resolution is 62.5 ns, and HSI absolute-frequency tolerance
+applies. Use it as a functional fallback, not as the final timing reference.
+
+TIM8 `ARR`, `CCR1`, and dead-time are calculated from the **actual selected
+timer clock at runtime**, so the firmware no longer silently assumes 180 MHz.
 
 ## Build and flash
 
@@ -289,20 +304,61 @@ The timer dead-time generator delays turn-on edges, so the physical UH/UL pulse
 width after dead-time insertion is not necessarily equal to the nominal
 reference duty. The scope measurement is the physical reference.
 
-## Debug variables
+## Runtime diagnostics
 
-The following globals are intentionally retained for the Keil Watch window:
+The following globals are intentionally retained for the Keil Watch window or a
+memory read through a debugger/programmer:
 
 ```text
+g_boot_stage
+g_clock_source
+g_clock_fault_flags
+g_sysclk_hz
+g_tim8_clock_hz
+
 g_pwm_profile_id
 g_pwm_frequency_hz
 g_pwm_duty_permille
 g_pwm_deadtime_ns
 g_pwm_deadtime_dtg
+g_pwm_deadtime_actual_ns
+g_pwm_period_ticks
+g_pwm_ccr1
+
+g_tim8_cr1_snapshot
+g_tim8_ccer_snapshot
+g_tim8_bdtr_snapshot
 SystemCoreClock
 ```
 
-They make it easy to confirm the selected Keil Target before wiring the BBB.
+Clock source values:
+
+```text
+1 = HSE-MCO -> PLL 180 MHz
+2 = HSI     -> PLL 180 MHz
+3 = direct HSI 16 MHz fallback
+```
+
+Boot stage:
+
+```text
+1 = entered main
+2 = status LEDs configured
+3 = clock selected
+4 = PWM GPIO AF configured
+5 = TIM8 started
+```
+
+LED diagnostics:
+
+```text
+LD3 green ON, LD4 red OFF -> PWM active, preferred HSE-MCO PLL path
+LD3 green ON, LD4 red ON  -> PWM active, HSI fallback path
+LD3 green OFF, LD4 red ON -> boot/init failure before PWM activation
+```
+
+This is useful when PC6/PA5 appear static: if green never turns on, debug the
+clock/startup path before looking at TIM8 or BBB capture.
 
 ## Safety
 

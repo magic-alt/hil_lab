@@ -105,8 +105,9 @@ def main() -> int:
             errors.append(f"legacy PlatformIO-style directory remains: {legacy.relative_to(ROOT)}")
 
     for pattern, label in [
-        (r"HIL_SYSCLK_HZ\s+\(180000000UL\)", "180 MHz SYSCLK"),
-        (r"HIL_APB2_TIMER_HZ\s+\(180000000UL\)", "180 MHz TIM8 clock"),
+        (r"HIL_PLL_SYSCLK_HZ\s+\(180000000UL\)", "180 MHz PLL SYSCLK"),
+        (r"HIL_HSI_HZ\s+\(16000000UL\)", "16 MHz HSI fallback"),
+        (r"HIL_HSE_MCO_HZ\s+\(8000000UL\)", "8 MHz DISC1 MCO reference"),
         (r"PWM_FREQUENCY_HZ\s+\(20000UL\)", "20 kHz default PWM"),
         (r"PWM_DUTY_PERMILLE\s+\(500UL\)", "50% default duty"),
         (r"PWM_DEADTIME_NS\s+\(700UL\)", "700 ns default dead-time"),
@@ -129,13 +130,23 @@ def main() -> int:
             errors.append(f"{ns} ns decodes to {actual_ns} ns")
 
     for pattern, label in [
-        (r"TIM8_ARR\s*=\s*HIL_PWM_ARR", "TIM8 ARR programming"),
-        (r"TIM8_CCR1\s*=\s*HIL_PWM_CCR1", "TIM8 CCR1 programming"),
+        (r"TIM8_ARR\s*=\s*period_ticks - 1UL", "runtime TIM8 ARR programming"),
+        (r"TIM8_CCR1\s*=\s*duty_ticks", "runtime TIM8 CCR1 programming"),
         (r"TIM8_CCER\s*=\s*TIM_CCER_CC1E \| TIM_CCER_CC1NE", "CH1/CH1N enable"),
         (r"TIM8_BDTR\s*=\s*\(dtg & 0xFFUL\) \| TIM_BDTR_MOE", "DTG/MOE programming"),
         (r"RCC_PLLCFGR\s*=", "PLL configuration"),
         (r"360UL << 6", "PLLN 360"),
+        (r"pll_m = 8UL", "HSE-MCO PLLM=8"),
+        (r"pll_m = 16UL", "HSI PLLM=16"),
         (r"RCC_CFGR_PPRE2_DIV2", "APB2 divider 2"),
+        (r"CLOCK_SOURCE_HSE_PLL", "HSE-MCO clock source state"),
+        (r"CLOCK_SOURCE_HSI_PLL", "HSI PLL fallback state"),
+        (r"CLOCK_SOURCE_HSI_DIRECT", "direct HSI emergency state"),
+        (r"wait_rcc_cr_set\(RCC_CR_HSERDY\)", "optional HSE readiness test"),
+        (r"g_clock_fault_flags \|= CLOCK_FAULT_HSE_TIMEOUT", "non-fatal HSE timeout"),
+        (r"deadtime_ns_to_dtg\(PWM_DEADTIME_NS, timer_clock_hz\)", "runtime dead-time clock"),
+        (r"g_pwm_deadtime_actual_ns", "quantized dead-time diagnostic"),
+        (r"g_boot_stage", "boot-stage diagnostic"),
         (r"GPIOC_BASE", "PC6 main output"),
         (r"GPIOA_BASE", "PA5 complementary output"),
     ]:
@@ -143,7 +154,10 @@ def main() -> int:
 
     forbid(source, r"stm32f4xx_hal|HAL_", "STM32Cube HAL dependency", errors)
     require(regs, r"TIM8_BASE\s+0x40010400UL", "TIM8 register base", errors)
-    require(system, r"SystemCoreClock\s*=\s*180000000UL", "180 MHz system core update", errors)
+    require(regs, r"RCC_CR_HSION\s+\(1UL << 0\)", "HSI enable bit", errors)
+    require(regs, r"RCC_CR_HSIRDY\s+\(1UL << 1\)", "HSI ready bit", errors)
+    require(system, r"SystemCoreClock\s*=\s*180000000UL", "180 MHz PLL system core update", errors)
+    require(system, r"SystemCoreClock\s*=\s*16000000UL", "16 MHz HSI system core fallback", errors)
     require(startup, r"Reset_Handler", "MDK reset handler", errors)
     require(startup, r"IMPORT\s+SystemInit", "startup SystemInit import", errors)
 
@@ -262,7 +276,8 @@ def main() -> int:
     print("  project: MDK-ARM/hil_pwm_stimulus.uvprojx")
     print("  linker: explicit stm32f429_flash.sct (Flash RO + SRAM RW/ZI)")
     print("  targets:", ", ".join(EXPECTED_TARGETS))
-    print("  20 kHz: ARR=8999, CCR1=4500")
+    print("  nominal PLL mode: 20 kHz -> ARR=8999, CCR1=4500")
+    print("  clock startup: HSE-MCO -> HSI-PLL -> direct-HSI fallback")
     print("  dead-time: 600ns=0x6c, 700ns=0x7e, 800ns=0x88")
     return 0
 
