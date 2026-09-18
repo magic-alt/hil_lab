@@ -10,6 +10,7 @@ This gate establishes the minimal deterministic BBB backend before PWM capture, 
 - Real-time core: PRU0
 - Firmware loading: Linux remoteproc (`am335x-pru0-fw` default)
 - Host transport: RPMsg character device, port 30
+- AM335x PRU0 RPMsg system events: 16 (PRU -> ARM), 17 (ARM -> PRU)
 - Hardware timebase: PRU IEP, configured for increment 1 at the nominal 200 MHz PRU/IEP clock
 - Counter exposed by B0: 32 bits; host software must handle wrap explicitly
 - Temporary loopback fixture: P9_31 PRU0 output -> P9_29 PRU0 input
@@ -68,6 +69,28 @@ The required files are:
 /usr/lib/ti/pru-software-support-package/include/am335x/...
 /usr/lib/ti/pru-software-support-package/lib/rpmsg_lib.lib
 ```
+
+## RPMsg compatibility
+
+The B0 firmware follows the AM335x `rpmsg_pru` system-event transport used by
+the BeagleBoard PRU Cookbook and TI PSSP examples:
+
+```text
+PRU0 -> ARM : system event 16
+ARM  -> PRU0: system event 17
+HOST_INT    : R31 bit 30
+```
+
+The resource table includes `pru_virtio_ids.h` for `VIRTIO_ID_RPMSG` and a
+PRU INTC custom resource mapping events 16/17 to the required channels/hosts.
+Firmware initializes the transport with:
+
+```c
+pru_rpmsg_init(..., 16, 17)
+```
+
+This avoids the legacy mailbox-register-address calls to
+`pru_virtqueue_init()`, which generate type warnings with PSSP v6.x.
 
 ## Build
 

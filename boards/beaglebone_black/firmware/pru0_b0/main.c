@@ -1,9 +1,8 @@
 #include <stdint.h>
 #include <pru_cfg.h>
 #include <pru_iep.h>
-#include <sys_mailbox.h>
+#include <pru_intc.h>
 #include <pru_rpmsg.h>
-#include <pru_virtqueue.h>
 
 #include "../common/hil_pru_protocol.h"
 #include "resource_table_0.h"
@@ -16,9 +15,10 @@ volatile register uint32_t __R31;
 #define CHAN_DESC                   "hil-b0-pru0"
 #define CHAN_PORT                   (30u)
 
-/* AM335x PRU0 RPMsg mailbox assignment from the Linux PRUSS DT binding. */
-#define MB_FROM_ARM_HOST             (2u)
-#define MB_TO_ARM_HOST               (3u)
+/* PRU0 RPMsg system events from the AM335x Linux device tree. */
+#define HOST_INT                    ((uint32_t)1u << 30)
+#define TO_ARM_HOST                 (16u)
+#define FROM_ARM_HOST               (17u)
 
 /* B0 temporary loopback fixture only: P9_31 -> P9_29 jumper. */
 #define LOOPBACK_OUT_R30_BIT        (0u)  /* P9_31 pru0_r30[0] */
@@ -226,22 +226,29 @@ void main(void)
     volatile uint8_t *driver_status;
 
     force_safe();
+
+    /* Allow PRU OCP master access and start the hardware timestamp. */
     CT_CFG.SYSCFG_bit.STANDBY_INIT = 0u;
     init_timebase();
+
+    /* Clear any stale ARM->PRU RPMsg event before enabling the transport. */
+    CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
 
     driver_status = &resourceTable.rpmsg_vdev.status;
     while (((*driver_status) & VIRTIO_CONFIG_S_DRIVER_OK) == 0u) {
         force_safe();
     }
 
-    pru_virtqueue_init(&transport.virtqueue0,
+    if (pru_rpmsg_init(&transport,
                        &resourceTable.rpmsg_vring0,
-                       &CT_MBX.MESSAGE[MB_TO_ARM_HOST],
-                       &CT_MBX.MESSAGE[MB_FROM_ARM_HOST]);
-    pru_virtqueue_init(&transport.virtqueue1,
                        &resourceTable.rpmsg_vring1,
-                       &CT_MBX.MESSAGE[MB_TO_ARM_HOST],
-                       &CT_MBX.MESSAGE[MB_FROM_ARM_HOST]);
+                       TO_ARM_HOST,
+                       FROM_ARM_HOST) != PRU_RPMSG_SUCCESS) {
+        force_safe();
+        while (1) {
+            /* Invalid RPMsg event configuration is a non-recoverable B0 fault. */
+        }
+    }
 
     while (pru_rpmsg_channel(RPMSG_NS_CREATE,
                              &transport,
@@ -260,12 +267,19 @@ void main(void)
             force_safe();
         }
 
-        if (CT_MBX.MESSAGE[MB_FROM_ARM_HOST] == 1u) {
-            if (pru_rpmsg_receive(&transport,
-                                  &src,
-                                  &dst,
-                                  rx_buffer.bytes,
-                                  &len) == PRU_RPMSG_SUCCESS) {
+        if ((__R31 & HOST_INT) != 0u) {
+            /*
+             * Clear the PRU system event first, then drain every RPMsg buffer
+             * that arrived under this kick. This matches the AM335x rpmsg_pru
+             * transport used by current BeagleBoard Debian images.
+             */
+            CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
+
+            while (pru_rpmsg_receive(&transport,
+                                     &src,
+                                     &dst,
+                                     rx_buffer.bytes,
+                                     &len) == PRU_RPMSG_SUCCESS) {
                 handle_request(len);
                 pru_rpmsg_send(&transport,
                                dst,
