@@ -84,7 +84,7 @@
 #define TIM_CCER_CC1NE      (1UL << 2)
 #define TIM_BDTR_MOE        (1UL << 15)
 
-static inline void cpu_wfi(void)
+static __inline void cpu_wfi(void)
 {
 #if defined(__ARMCC_VERSION)
     __asm volatile ("wfi");
