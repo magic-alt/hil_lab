@@ -20,9 +20,9 @@ volatile register uint32_t __R31;
 #define MB_FROM_ARM_HOST             (2u)
 #define MB_TO_ARM_HOST               (3u)
 
-/* B0 temporary loopback fixture only: P9_31 -> P9_25 jumper. */
+/* B0 temporary loopback fixture only: P9_31 -> P9_29 jumper. */
 #define LOOPBACK_OUT_R30_BIT        (0u)  /* P9_31 pru0_r30[0] */
-#define LOOPBACK_IN_R31_BIT         (7u)  /* P9_25 pru0_r31[7] */
+#define LOOPBACK_IN_R31_BIT         (1u)  /* P9_29 pru0_r31[1] */
 #define LOOPBACK_OUT_MASK           (1u << LOOPBACK_OUT_R30_BIT)
 #define LOOPBACK_IN_MASK            (1u << LOOPBACK_IN_R31_BIT)
 
