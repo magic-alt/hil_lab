@@ -169,40 +169,86 @@ The first implementation is semantics-first C. Before claiming the final B1
 timing bound, inspect generated PRU assembly and optimize/unroll the hot loop if
 required.
 
-## STM32F429I-DISC1 stimulus source
+## No-motor PWM stimulus sources
 
-The first physical B1 input source is now provided in:
+B1 now has three MCU-side PWM generators. They share the same profile names so
+the BBB capture procedure does not change when the stimulus board changes.
 
-```text
-boards/stm32f429i_disc1/
-```
+| Source | PWM peripheral | Output coverage | Project |
+| --- | --- | --- | --- |
+| STM32F429I-DISC1 | TIM8 CH1/CH1N | U pair | `boards/stm32f429i_disc1/` |
+| HPM6E00EVK | HPM_PWM1 / PWMV2 | U/V/W six PWM | `boards/hpm6e00evk/` |
+| GD32H75EY-EVAL | TIMER0 CH0..2 + MCH0..2 | U/V/W six PWM | `boards/gd32h75ey_eval/` |
 
-It uses TIM8 complementary outputs:
-
-```text
-PC6 / TIM8_CH1  / P1-57 -> BBB P9_29 / UH
-PA5 / TIM8_CH1N / P2-21 -> BBB P9_30 / UL
-GND                         BBB GND
-```
-
-Default waveform:
+Common profiles:
 
 ```text
-20 kHz
-50% reference duty
-700 ns dead-time
-3.3 V logic
+20k_50_600ns
+20k_50_700ns
+20k_50_800ns
+20k_5_700ns
+20k_25_700ns
+20k_75_700ns
+20k_95_700ns
 ```
 
-Open the native Keil project:
+### STM32F429I-DISC1
+
+Native Keil project:
 
 ```text
 boards/stm32f429i_disc1/MDK-ARM/hil_pwm_stimulus.uvprojx
 ```
 
-Use the uVision Target selector to switch between 600/700/800 ns dead-time and
-5/25/50/75/95% duty configurations. See
-`boards/stm32f429i_disc1/README.md` for the full Keil workflow.
+First-pair wiring:
+
+```text
+PC6 / TIM8_CH1  -> BBB P9_29 / UH
+PA5 / TIM8_CH1N -> BBB P9_30 / UL
+GND             -> BBB GND
+```
+
+### HPM6E00EVK
+
+Native HPM SDK/CMake application. The official board PWM1 pinmux exposes:
+
+```text
+PE08 / PWM1_P0 -> P9_29 / UH
+PE09 / PWM1_P1 -> P9_30 / UL
+PE10 / PWM1_P2 -> P9_28 / VH
+PE11 / PWM1_P3 -> P9_27 / VL
+PE12 / PWM1_P4 -> P8_16 / WH
+PE13 / PWM1_P5 -> P8_15 / WL
+GND            -> BBB GND
+```
+
+Use `-DBOARD=hpm6e00evk -DHIL_PWM_PROFILE=20k_50_700ns` for the first run.
+
+### GD32H75EY-EVAL
+
+Native Keil multi-target project:
+
+```text
+boards/gd32h75ey_eval/MDK-ARM/hil_pwm_stimulus.uvprojx
+```
+
+TIMER0 wiring:
+
+```text
+PA8  / TIMER0_CH0  -> P9_29 / UH
+PA7  / TIMER0_MCH0 -> P9_30 / UL
+PE11 / TIMER0_CH1  -> P9_28 / VH
+PB0  / TIMER0_MCH1 -> P9_27 / VL
+PE13 / TIMER0_CH2  -> P8_16 / WH
+PE12 / TIMER0_MCH2 -> P8_15 / WL
+GND                -> BBB GND
+```
+
+Run `prepare_vendor.ps1` once against the official GD32H75E Firmware Library
+before opening/building the Keil project.
+
+For all three boards start with `20k_50_700ns`, verify one phase pair with a
+scope, then expand to six-PWM capture and run the full duty/dead-time sweep.
 
 ## Physical verification sequence
 
