@@ -81,8 +81,9 @@ ARM  -> PRU0: system event 17
 HOST_INT    : R31 bit 30
 ```
 
-The resource table includes `pru_virtio_ids.h` for `VIRTIO_ID_RPMSG` and a
-PRU INTC custom resource mapping events 16/17 to the required channels/hosts.
+The resource table includes `pru_virtio_ids.h` for `VIRTIO_ID_RPMSG`, `pru_types.h` for PRU interrupt resource structures, and a PRU INTC resource mapping events 16/17 to the required channels/hosts.
+
+For TI Linux 4.14+ (including the validated `5.10.145-ti-rt-r55` kernel), the interrupt resource uses `TYPE_POSTLOAD_VENDOR` with `PRU_INTS_VER0 | TYPE_PRU_INTS`; the older `TYPE_CUSTOM` encoding is intentionally not used.
 Firmware initializes the transport with:
 
 ```c
