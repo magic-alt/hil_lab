@@ -1,0 +1,8 @@
+Objects/
+Listings/
+Logs/
+*.uvguix.*
+*.scvd
+*.map
+*.htm
+*.lnp

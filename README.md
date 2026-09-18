@@ -109,7 +109,9 @@ hil_lab/
 │   ├── zu2cg/                   AXU2CGB board integration
 │   ├── zynq7010/                AX7010 FPGA-Lite HIL backend
 │   ├── beaglebone_black/        PRU digital-HIL backend
-│   └── stm32f429i_disc1/        Keil MDK multi-target 20 kHz PWM stimulus
+│   ├── stm32f429i_disc1/        Keil TIM8 U-pair PWM stimulus
+│   ├── hpm6e00evk/              HPM SDK PWMV2 six-PWM stimulus
+│   └── gd32h75ey_eval/          Keil TIMER0 six-PWM stimulus
 ├── docs/
 │   ├── architecture.md
 │   ├── backend-contract.md      shared behavioral contract
@@ -131,7 +133,7 @@ sudo apt-get install iverilog verilator make python3
 make verify
 ```
 
-`make verify` also checks the AX7010 FPGA-Lite RTL/constraints/tests, BBB host/core contracts and the STM32F429I-DISC1 PWM stimulus configuration. Real Vivado bitstream builds, PRU builds and STM32 cross-compilation remain explicit hardware/toolchain steps.
+`make verify` also checks the AX7010 FPGA-Lite RTL/constraints/tests, BBB host/core contracts and all three MCU PWM stimulus configurations (STM32F429I-DISC1, HPM6E00EVK and GD32H75EY-EVAL). Real Vivado bitstream builds, PRU builds and MCU cross-compilation remain explicit hardware/toolchain steps.
 
 Hardware evidence must always record:
 
