@@ -67,7 +67,7 @@ module ssi_encoder_master_capture #(
                     captured_data <= {captured_data[DATA_BITS-2:0], data_sync};
 
                     if (bit_count >= (DATA_BITS - 1)) begin
-                        bit_count  <= DATA_BITS[15:0];
+                        bit_count  <= DATA_BITS;
                         busy       <= 1'b0;
                         done_pulse <= 1'b1;
                     end else begin
