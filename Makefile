@@ -29,7 +29,7 @@ BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 	dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
 	zynq7010-constraints zynq7010-compile zynq7010-test zynq7010-lint \
-	bbb-check bbb-pru-env bbb-pru-build bbb-b1-pru-env bbb-b1-pru-build stm32-pwm-check mcu-pwm-check clean
+	bbb-check bbb-pru-env bbb-pru-build bbb-b1-pru-env bbb-b1-pru-build bbb-b1-raw-pru-env bbb-b1-raw-pru-build stm32-pwm-check mcu-pwm-check clean
 
 all: verify
 
@@ -124,6 +124,7 @@ bbb-check:
 	$(MAKE) -C boards/beaglebone_black check
 	$(PYTHON) tools/bbb_b0_static_check.py
 	$(PYTHON) tools/bbb_b1_static_check.py
+	$(PYTHON) tools/bbb_b1_raw_static_check.py
 
 bbb-pru-env:
 	$(MAKE) -C boards/beaglebone_black env
@@ -136,6 +137,12 @@ bbb-b1-pru-env:
 
 bbb-b1-pru-build:
 	$(MAKE) -C boards/beaglebone_black pru0-b1
+
+bbb-b1-raw-pru-env:
+	$(MAKE) -C boards/beaglebone_black b1-raw-env
+
+bbb-b1-raw-pru-build:
+	$(MAKE) -C boards/beaglebone_black pru0-b1-raw
 
 stm32-pwm-check:
 	$(PYTHON) tools/stm32f429i_pwm_static_check.py

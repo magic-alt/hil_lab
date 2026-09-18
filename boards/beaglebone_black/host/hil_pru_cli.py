@@ -21,6 +21,10 @@ from hil_pru_protocol import (
     CAP_WATCHDOG,
     CAP_PWM_CAPTURE,
     CAP_PWM_COMPLEMENTARY_MONITOR,
+    CAP_RAW_EDGE_CAPTURE,
+    CAP_STIMULUS_ENGINE,
+    CAP_ABZ_EMULATOR,
+    CAP_SCHEDULED_GPIO,
     MSG_FORCE_SAFE,
     MSG_GPIO_LOOPBACK,
     MSG_HELLO,
@@ -40,6 +44,10 @@ CAP_NAMES = {
     CAP_PWM_CAPTURE: "pwm_capture",
     CAP_PWM_COMPLEMENTARY_MONITOR: "pwm_complementary_monitor",
     CAP_SHARED_SNAPSHOT: "shared_snapshot",
+    CAP_RAW_EDGE_CAPTURE: "raw_edge_capture",
+    CAP_STIMULUS_ENGINE: "stimulus_engine",
+    CAP_ABZ_EMULATOR: "abz_emulator",
+    CAP_SCHEDULED_GPIO: "scheduled_gpio",
 }
 
 
