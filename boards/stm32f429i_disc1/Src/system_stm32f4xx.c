@@ -12,14 +12,18 @@ void SystemInit(void)
     /* Application vector table lives at the start of internal Flash. */
     SCB_VTOR = 0x08000000UL;
 
+    /*
+     * After reset STM32F429 runs from HSI. main() owns the final clock-tree
+     * selection and may use HSE-MCO->PLL, HSI->PLL, or direct HSI fallback.
+     */
     SystemCoreClock = 16000000UL;
 }
 
 void SystemCoreClockUpdate(void)
 {
-    /*
-     * This project owns the entire clock tree and always switches to
-     * 180 MHz before calling this function.
-     */
-    SystemCoreClock = 180000000UL;
+    if ((RCC_CFGR & RCC_CFGR_SWS_MASK) == RCC_CFGR_SWS_PLL) {
+        SystemCoreClock = 180000000UL;
+    } else {
+        SystemCoreClock = 16000000UL;
+    }
 }
