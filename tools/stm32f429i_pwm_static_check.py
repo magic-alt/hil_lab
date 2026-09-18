@@ -191,7 +191,7 @@ def main() -> int:
                 errors.append(f"{name}: HEX output is disabled")
             if use_scatter != "1":
                 errors.append(f"{name}: explicit scatter file is not enabled")
-            if scatter_file != r".\\stm32f429_flash.sct":
+            if scatter_file != r".\stm32f429_flash.sct":
                 errors.append(f"{name}: wrong scatter file {scatter_file!r}")
 
             expected_defs = {
