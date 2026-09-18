@@ -3,7 +3,7 @@ PRU0_DIR := firmware/pru0_b0
 HOST_DIR := host
 FIRMWARE := $(PRU0_DIR)/gen/hil_b0_pru0.out
 
-.PHONY: check protocol-test python-check shell-check pru0 deploy clean
+.PHONY: check protocol-test python-check shell-check env pru0 deploy clean
 
 check: python-check protocol-test shell-check
 
@@ -15,6 +15,9 @@ protocol-test:
 
 shell-check:
 	bash -n pinmux/setup_b0_loopback.sh
+
+env:
+	$(MAKE) -C $(PRU0_DIR) env
 
 pru0:
 	$(MAKE) -C $(PRU0_DIR)

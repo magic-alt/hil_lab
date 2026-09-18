@@ -34,11 +34,39 @@ Install/provide:
 - `config-pin` for the temporary loopback fixture
 - Python 3
 
-Example environment on an ARM Debian image where TI CGT is installed in the conventional location:
+Example environment on an ARM Debian image:
 
 ```bash
 export PRU_CGT=/usr/share/ti/cgt-pru
-export PSSP_DIR=$HOME/pru-software-support-package
+
+# Usually auto-detected when installed here:
+# /usr/lib/ti/pru-software-support-package
+# You only need to export PSSP_DIR for a custom location.
+```
+
+Inspect what the build detected:
+
+```bash
+make bbb-pru-env
+```
+
+If PSSP is missing, install/clone the TI package:
+
+```bash
+sudo apt update
+sudo apt install -y git ti-pru-cgt-v2.3
+sudo mkdir -p /usr/lib/ti
+sudo git clone --depth 1 --branch v6.5.0 \
+  https://git.ti.com/git/pru-software-support-package/pru-software-support-package.git \
+  /usr/lib/ti/pru-software-support-package
+```
+
+The required files are:
+
+```text
+/usr/lib/ti/pru-software-support-package/include/pru_rpmsg.h
+/usr/lib/ti/pru-software-support-package/include/am335x/...
+/usr/lib/ti/pru-software-support-package/lib/rpmsg_lib.lib
 ```
 
 ## Build
