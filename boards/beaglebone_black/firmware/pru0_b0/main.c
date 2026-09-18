@@ -6,6 +6,7 @@
 
 #include "../common/hil_pru_protocol.h"
 #include "resource_table_0.h"
+#include "intc_map_0.h"
 
 volatile register uint32_t __R30;
 volatile register uint32_t __R31;

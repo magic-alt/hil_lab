@@ -81,9 +81,15 @@ ARM  -> PRU0: system event 17
 HOST_INT    : R31 bit 30
 ```
 
-The resource table includes `pru_virtio_ids.h` for `VIRTIO_ID_RPMSG`, `pru_types.h` for PRU interrupt resource structures, and a PRU INTC resource mapping events 16/17 to the required channels/hosts.
+PSSP v6.0.x no longer places the PRU-side INTC mapping in the RPMsg resource table. The resource table contains only the RPMsg virtio device. A separate `.pru_irq_map` section uses `struct pru_irq_rsc`.
 
-For TI Linux 4.14+ (including the validated `5.10.145-ti-rt-r55` kernel), the interrupt resource uses `TYPE_POSTLOAD_VENDOR` with `PRU_INTS_VER0 | TYPE_PRU_INTS`; the older `TYPE_CUSTOM` encoding is intentionally not used.
+For PRU0, Linux/device-tree owns the PRU -> ARM event 16 mapping. The firmware IRQ map contains only the ARM -> PRU kick path:
+
+```text
+system event 17 -> channel 0 -> host interrupt 0 (R31 bit 30)
+```
+
+The linker retains `.pru_irq_map` with a `COPY` section, matching the BeagleBoard-packaged PSSP v6.0.x AM335x RPMsg example. This intentionally avoids the obsolete `struct ch_map / fw_rsc_custom_ints` resource-table path.
 Firmware initializes the transport with:
 
 ```c
