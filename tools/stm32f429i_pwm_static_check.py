@@ -169,6 +169,7 @@ def main() -> int:
             clang_as = target.findtext("./TargetOption/TargetArmAds/Aads/ClangAsOpt", default="")
             output = target.findtext("./TargetOption/TargetCommonOption/OutputDirectory", default="")
             hex_enable = target.findtext("./TargetOption/TargetCommonOption/CreateHexFile", default="")
+            use_target_memory = target.findtext("./TargetOption/TargetArmAds/LDads/umfTarg", default="")
             use_scatter = target.findtext("./TargetOption/TargetArmAds/LDads/useFile", default="")
             scatter_file = target.findtext("./TargetOption/TargetArmAds/LDads/ScatterFile", default="")
             defines_raw = target.findtext(
@@ -189,6 +190,8 @@ def main() -> int:
                 errors.append(f"{name}: output directory is not target-specific")
             if hex_enable != "1":
                 errors.append(f"{name}: HEX output is disabled")
+            if use_target_memory != "0":
+                errors.append(f"{name}: Use Memory Layout from Target Dialog must be disabled")
             if use_scatter != "1":
                 errors.append(f"{name}: explicit scatter file is not enabled")
             if scatter_file != r".\stm32f429_flash.sct":
