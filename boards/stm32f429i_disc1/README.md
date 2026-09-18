@@ -60,6 +60,17 @@ repository, so the project does not depend on the Device:Startup component
 removed from newer STM32F4 DFP releases. The startup source is assembled with
 uVision's Arm Compiler 6 legacy Arm-syntax assembler compatibility mode.
 
+The project also uses an explicit Arm Compiler 6 scatter file:
+
+```text
+MDK-ARM/stm32f429_flash.sct
+```
+
+It places read-only code/data in internal Flash at `0x08000000` and the default
+RW/ZI region in SRAM at `0x20000000`. This avoids uVision auto-scatter ambiguity
+that can otherwise produce `Scatter Error: no default 'Read/Write' range selected`
+on some MDK/Compiler 6 installations.
+
 ## Directory layout
 
 ```text
