@@ -20,12 +20,12 @@ BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 .PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event \
 	dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
-	bbb-check bbb-pru-env bbb-pru-build bbb-b1-pru-env bbb-b1-pru-build stm32-pwm-check clean
+	bbb-check bbb-pru-env bbb-pru-build bbb-b1-pru-env bbb-b1-pru-build stm32-pwm-check mcu-pwm-check clean
 
 all: verify
 
 verify: policy compile test lint dac-compile dac-test dac-pattern-test dac-lint \
-	board-constraints board-compile board-test board-lint bbb-check stm32-pwm-check
+	board-constraints board-compile board-test board-lint bbb-check mcu-pwm-check
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -107,6 +107,9 @@ bbb-b1-pru-build:
 
 stm32-pwm-check:
 	$(PYTHON) tools/stm32f429i_pwm_static_check.py
+
+mcu-pwm-check: stm32-pwm-check
+	$(PYTHON) tools/hpm_gd32_pwm_static_check.py
 
 clean:
 	rm -rf $(BUILD_DIR)
