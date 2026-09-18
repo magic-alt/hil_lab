@@ -15,7 +15,7 @@ The `feat/b0-bbb-pru-bringup` work establishes:
 - local safe-state/watchdog behavior;
 - automatic remoteproc firmware install/start/stop script;
 - Python RPMsg client for HELLO/TIME/PING/SAFE/LOOPBACK;
-- temporary deterministic GPIO loopback using P9_31 -> P9_25;
+- temporary deterministic GPIO loopback using P9_31 -> P9_29;
 - software-only protocol/static checks suitable for normal GitHub Actions.
 
 Detailed target bring-up: [B0_BRINGUP.md](B0_BRINGUP.md).
@@ -40,7 +40,7 @@ PRU0
 ├── IEP timebase
 ├── RPMsg control plane
 ├── P9_31 R30[0] loopback output
-├── P9_25 R31[7] loopback input
+├── P9_29 R31[1] loopback input
 └── watchdog / safe state
 ```
 
