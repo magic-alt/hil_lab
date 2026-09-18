@@ -164,15 +164,35 @@ TIM8            = 180 MHz
 
 Keep the ST-LINK USB connected when using the factory MCO clock path.
 
-## Build and download in Keil
+## Build and flash
 
 1. Open `MDK-ARM/hil_pwm_stimulus.uvprojx`.
 2. Select Target `20k_50_700ns`.
 3. Use **Project -> Build Target** (F7).
-4. Connect the onboard ST-LINK USB.
-5. Use **Flash -> Download**.
-6. Reset/run the board.
-7. LD3 green on PG13 turns on after TIM8 is started.
+
+The repository project intentionally does **not** hard-code a specific ST-Link
+debug DLL. Different MDK installations ship the ST-Link plugin in different
+locations/versions, and a hard-coded `STLink\\ST-LINKIII-KEIL_SWO.dll` can make
+an otherwise valid project fail to open.
+
+For a portable command-line flash path, install STM32CubeProgrammer, connect the
+on-board ST-Link USB, then run:
+
+```bat
+cd boards\stm32f429i_disc1\MDK-ARM
+flash.bat 20k_50_700ns
+```
+
+`flash.bat` uses `STM32_Programmer_CLI.exe` over SWD, verifies the programmed
+HEX and resets the target. If CubeProgrammer is installed in a non-standard
+location, set `STM32_PROGRAMMER_CLI` to the full executable path.
+
+If you prefer **Flash -> Download** or hardware debug directly in uVision,
+select the debugger installed on your machine under **Options for Target ->
+Debug** and **Utilities**. That is intentionally a local workstation setting,
+not a repository-wide dependency.
+
+LD3 green on PG13 turns on after TIM8 is started.
 
 The project creates a HEX file for each configuration, for example:
 
