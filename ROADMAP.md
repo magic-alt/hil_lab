@@ -1,151 +1,216 @@
 # Servo HIL Roadmap
 
-This roadmap defines the product gates for `hil_lab`. Each gate must have measurable exit criteria before the next gate becomes the default development focus.
+`hil_lab` uses two parallel development tracks with different responsibilities.
+
+- **Track A (G-series): ZU2CG / AXU2CGB Full HIL** is the primary product path.
+- **Track B (B-series): BeagleBone Black / PRU Digital HIL** is a companion path for rapid deterministic digital testing.
+
+Track B accelerates firmware validation but does not replace Track A analog/PMSM/joint-model work.
+
+# Track A — ZU2CG / AXU2CGB Full HIL
 
 ## G0 — ZU2CG FPGA Digital HIL
 
-**Goal:** establish a safe, deterministic, vendor-light Signal-Level Controller HIL core.
+**Goal:** establish the safe deterministic FPGA baseline and validate it on the physical AXU2CGB plus a servo DUT.
 
-Scope:
-
-- PWM edge capture, period, high/low time and duty measurement;
-- complementary PWM dead-time measurement;
-- shoot-through-command detection;
-- global FPGA timestamp;
-- ABZ quadrature encoder emulation;
-- SPI mode-0 absolute-encoder/sensor emulation;
-- digital I/O event scheduler;
-- ZU2CG board-integration seam;
-- RTL simulation/lint CI;
-- coding, review and AI-agent rules.
-
-Exit criteria:
+Implemented:
 
 - [x] synthesizable Verilog-2001 reusable RTL skeleton;
-- [x] self-checking simulations for the first digital blocks;
-- [x] CI gate for RTL policy/compile/simulation/lint;
-- [ ] ZU2CG reference clock/reset/pin constraints committed for the exact carrier board;
-- [ ] loopback validated on physical FPGA hardware;
-- [ ] servo DUT PWM capture validated at the intended 20 kHz switching frequency;
-- [ ] ABZ and SPI encoder emulation validated against a real servo MCU.
+- [x] FPGA timestamp/timebase;
+- [x] PWM period/high/low capture;
+- [x] complementary dead-time monitor and fault latches;
+- [x] ABZ encoder emulator;
+- [x] SPI mode-0 sensor/encoder emulator;
+- [x] deterministic DIO event scheduler;
+- [x] self-checking simulations and CI;
+- [x] exact AXU2CGB device/clock/pin integration;
+- [x] reproducible Vivado project/bitstream Tcl;
+- [x] board-top simulation and constraint-integrity checks.
 
-## G1 — 4/8-channel DAC integration
+Remaining exit criteria (#1):
 
-**Goal:** inject low-voltage sensor feedback into the DUT ADC path.
+- [ ] run physical Vivado implementation/timing/DRC evidence on the intended toolchain;
+- [ ] program the AXU2CGB and validate connector loopback;
+- [ ] resolve the physical PL reference-clock voltage-level documentation discrepancy;
+- [ ] validate servo DUT 20 kHz PWM/dead-time measurement against an oscilloscope;
+- [ ] validate ABZ and SPI emulation against a real servo MCU;
+- [ ] validate at least one DUT communication path;
+- [ ] freeze/review the first protected DUT adapter.
 
-Scope:
+## G1 — 4-channel AD3542R analog-feedback evaluation
 
-- evaluate a 4- or 8-channel DAC board before designing custom PCB hardware;
-- deterministic FPGA-to-DAC update interface;
-- 0–3.3 V DUT-facing current/voltage sensor emulation;
-- offset/gain calibration table;
-- output clamp and safe-state behavior.
+**Goal:** prove low-voltage current/bus sensor injection before a custom HIL PCB is designed.
 
-Exit criteria:
+Tracked by #3 / PR #10.
 
-- [ ] >= 4 synchronized analog outputs demonstrated;
-- [ ] >= 1 MSPS target update path characterized;
-- [ ] closed digital-to-analog loop latency measured;
-- [ ] power-on and communication-loss outputs fail safe.
+Implemented in the current G1 code path:
+
+- [x] two-board AD3542R four-channel streaming architecture;
+- [x] deterministic FPGA-to-DAC stream;
+- [x] calibration pattern generation;
+- [x] AXU2CGB integration;
+- [x] external analog-output-enable safety seam;
+- [x] compile/simulation/lint gates.
+
+Remaining physical exit criteria:
+
+- [ ] build/use the required 3.3 V <-> 1.8 V interposer;
+- [ ] verify 50 MHz SPI through the interposer;
+- [ ] demonstrate >=4 analog outputs;
+- [ ] characterize gain/offset, settling, latency and inter-channel skew;
+- [ ] verify independent analog clamp/safe-state behavior;
+- [ ] inject Ia/Ib/Ic/Vbus into a real servo MCU ADC path.
 
 ## G2 — PMSM closed-loop HIL
 
-**Goal:** close the real servo FOC loop without a physical motor.
+**Goal:** close a real 20 kHz servo FOC loop without a physical motor.
 
-Scope:
+Scope (#4):
 
-- averaged three-phase inverter model;
+- averaged inverter model;
 - PMSM dq electrical model;
-- simple inertia/friction mechanical model;
-- PWM -> plant -> Ia/Ib/Ic -> DUT ADC feedback loop;
-- encoder position generated from simulated rotor state.
+- mechanical inertia/friction model;
+- PWM -> plant -> DAC feedback loop;
+- simulated rotor state driving encoder feedback;
+- explicit fixed-step and end-to-end latency budget.
 
 Exit criteria:
 
-- [ ] 20 kHz FOC current loop closes stably against the simulated plant;
-- [ ] current steps and speed ramps are repeatable;
-- [ ] model parameters are runtime configurable;
-- [ ] numerical step/latency budget is documented.
+- [ ] stable 20 kHz FOC current-loop closure;
+- [ ] repeatable current steps and speed ramps;
+- [ ] runtime-configurable motor parameters;
+- [ ] numerical range/saturation regressions;
+- [ ] measured model/PWM/DAC end-to-end latency.
 
 ## G3 — 8-channel ADC/DAC HIL PCB
 
-**Goal:** replace evaluation boards with a calibrated HIL analog front end.
+**Goal:** replace evaluation boards with calibrated protected HIL analog I/O.
 
-Target direction:
+Tracked by #5. G1/G2 measurements define the PCB requirements; the PCB must not be designed around unverified timing assumptions.
 
-- 8x DAC, nominal 16-bit, >= 1 MSPS class;
-- 8x ADC, nominal 16-bit, synchronized where practical;
-- buffered and protected DUT-facing 0–3.3 V paths;
-- internal bipolar range only where justified;
-- digital isolation where it improves safety/grounding;
-- EEPROM or software calibration data.
+## G4 — complete Fault Injection Unit
 
-Exit criteria:
+**Goal:** provide deterministic protected digital and analog signal-side fault injection.
 
-- [ ] schematic review and interface FMEA complete;
-- [ ] prototype passes channel-to-channel gain/offset characterization;
-- [ ] settling and end-to-end delay meet the HIL model budget;
-- [ ] adapter-board interface is frozen.
+Tracked by #6.
 
-## G4 — Fault Injection Unit
+BBB B3 may deliver an early **digital subset**, but G4 remains responsible for the final ZU2CG/adapter-integrated FIU, including analog sensor faults and the production HIL electrical safety design.
 
-**Goal:** automate safe signal-side robustness tests.
+## G5 — unattended pytest / Servo CI
 
-Initial fault classes:
+**Goal:** turn the bench into a reproducible automated regression service.
 
-- encoder open/stuck/jump;
-- SPI frame corruption and timeout;
-- sensor offset and over/under-range;
-- signal open/short-to-low/short-to-low-voltage-rail through protected circuitry;
-- CAN/RS485/EtherCAT communication interruption at the appropriate interface layer;
-- digital enable/fault/watchdog sequencing.
+Tracked by #7.
 
-Power-stage destructive fault emulation is explicitly out of scope for this gate.
+G5 consumes the common backend contract introduced by B4 so that digital tests can run on BBB or ZU2CG where capabilities overlap.
 
-Exit criteria:
+## G6 — dual-inertia robotic-joint model
 
-- [ ] each supported fault has deterministic trigger and timestamp;
-- [ ] safe limits are enforced in hardware and software;
-- [ ] test result records include injection time and DUT reaction latency.
+**Goal:** evolve the PMSM plant into humanoid/robotic joint HIL.
 
-## G5 — Automated pytest / CI regression
+Tracked by #8.
 
-**Goal:** turn HIL into Servo CI rather than a manually operated bench.
+Scope remains motor/load inertia, gearbox ratio/efficiency, compliance/damping, friction, backlash where needed, dual encoders and output torque sensing.
 
-Scope:
+# Track B — BeagleBone Black / PRU Digital HIL
 
-- host API;
-- pytest fixtures and test-case metadata;
-- firmware flashing / power-cycle orchestration;
-- JUnit + waveform + measurement artifacts;
-- hardware resource locking;
-- self-hosted runner/HIL reservation model;
-- pass/fail limits versioned with hardware and firmware.
+## B0 — PRU backend bring-up (#11)
+
+**Goal:** establish a safe, reproducible AM3358 PRU execution and host-control baseline.
 
 Exit criteria:
 
-- [ ] a firmware revision can execute a reproducible unattended HIL suite;
-- [ ] failed tests retain enough waveform/context for diagnosis;
-- [ ] CI distinguishes infrastructure failure from DUT failure.
+- [ ] reproducible PRU build/load/start/stop;
+- [ ] host <-> PRU capability/version/timestamp exchange;
+- [ ] documented timer/tick and rollover semantics;
+- [ ] documented pinmux/adapter ownership;
+- [ ] demonstrated reset/host-loss safe state;
+- [ ] deterministic GPIO loopback measurement.
 
-## G6 — Dual-inertia robotic-joint model
+## B1 — PRU PWM capture + dead-time (#12)
 
-**Goal:** evolve from generic motor HIL into humanoid-joint servo HIL.
-
-Scope:
-
-- motor inertia;
-- gearbox ratio/efficiency;
-- compliance and damping;
-- load inertia;
-- Coulomb/viscous friction;
-- backlash/dead-zone where required;
-- motor-side + output-side encoder model;
-- output torque sensor model;
-- harmonic, planetary and linear actuator parameter sets.
+**Goal:** provide an independent deterministic implementation of the digital PWM measurement path.
 
 Exit criteria:
 
-- [ ] resonance/anti-resonance behavior is reproducible;
-- [ ] notch/DOB/ESO/controller changes can be compared automatically;
-- [ ] dual-encoder and torque-loop regressions are supported.
+- [ ] continuous 20 kHz servo PWM capture;
+- [ ] period/high/low/dead-time measurements;
+- [ ] overlap/minimum-dead-time detection;
+- [ ] scope/logic-analyzer comparison;
+- [ ] sustainable event-rate and timing error characterized.
+
+## B2 — PRU ABZ encoder generator (#13)
+
+**Goal:** drive a real servo MCU QEP/timer input without a motor encoder.
+
+Exit criteria:
+
+- [ ] valid forward/reverse quadrature;
+- [ ] deterministic speed/direction updates;
+- [ ] configurable index behavior;
+- [ ] maximum transition rate characterized;
+- [ ] real servo-MCU position/direction validation.
+
+## B3 — deterministic fault/stimulus GPIO (#14)
+
+**Goal:** make BBB useful as a servo firmware fault-injection box.
+
+Exit criteria:
+
+- [ ] timestamped arm/fire/clear events;
+- [ ] masked multi-channel update;
+- [ ] host-loss watchdog and safe recovery;
+- [ ] at least one protected DUT fault path exercised;
+- [ ] DUT reaction latency retained in test evidence.
+
+## B4 — common backend API + pytest conformance (#15)
+
+**Goal:** make BBB and ZU2CG two backends of one HIL system rather than two separate projects.
+
+Required common semantics:
+
+- backend identity/version/capabilities;
+- monotonic timestamp metadata;
+- PWM measurements;
+- ABZ configuration/control;
+- deterministic DIO scheduling;
+- force-safe/reset;
+- health/error counters.
+
+ZU2CG-only analog/PMSM capabilities remain explicit capabilities and must not be approximated with nondeterministic Linux code on BBB.
+
+# Convergence rules
+
+1. **ZU2CG remains the reference Full-HIL implementation.**
+2. **BBB is digital-only unless a later design explicitly expands it.**
+3. Host tests specify capabilities, not board names.
+4. Raw hardware time is represented as ticks plus clock metadata; conversion does not hide quantization.
+5. Linux is the control plane. Time-critical capture/generation/scheduling stays in FPGA PL or PRU.
+6. Unsupported capabilities fail/skip explicitly; they are never silently emulated with ordinary Linux GPIO timing.
+7. G1/G2/G3 continue even while B0-B3 are being developed.
+8. B4/G5 is the architectural convergence point.
+
+# Immediate priority
+
+Parallel work is now permitted:
+
+**ZU2CG lane**
+
+```text
+G0 physical qualification
+        +
+G1 AD3542R physical qualification
+        -> G2 PMSM closed loop
+```
+
+**BBB lane**
+
+```text
+B0 PRU bring-up
+   -> B1 PWM capture
+   -> B2 ABZ generator
+   -> B3 Fault GPIO
+   -> B4 common pytest backend
+```
+
+Neither lane is a prerequisite for abandoning or pausing the other.
