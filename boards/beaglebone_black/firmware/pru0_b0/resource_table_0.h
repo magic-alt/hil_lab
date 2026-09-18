@@ -6,6 +6,7 @@
 #include <rsc_types.h>
 #include <pru_rpmsg.h>
 #include <pru_virtio_ids.h>
+#include <pru_types.h>
 
 #define PRU_RPMSG_VQ0_SIZE          (16u)
 #define PRU_RPMSG_VQ1_SIZE          (16u)
