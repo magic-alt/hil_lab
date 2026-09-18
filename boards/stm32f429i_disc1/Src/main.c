@@ -79,6 +79,17 @@ static uint32_t wait_sysclk_pll(void)
     return ((RCC_CFGR & RCC_CFGR_SWS_MASK) == RCC_CFGR_SWS_PLL) ? 1UL : 0UL;
 }
 
+static uint32_t wait_sysclk_hsi(void)
+{
+    uint32_t timeout = CLOCK_WAIT_LOOPS;
+
+    while (((RCC_CFGR & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_HSI) &&
+           (timeout-- != 0UL)) {
+    }
+
+    return ((RCC_CFGR & RCC_CFGR_SWS_MASK) == RCC_CFGR_SWS_HSI) ? 1UL : 0UL;
+}
+
 /*
  * STM32F429 RM0090 TIMx_BDTR.DTG encoding with CKD=DIV1.
  */
@@ -310,6 +321,7 @@ use_direct_hsi:
           RCC_CFGR_HPRE_MASK |
           RCC_CFGR_PPRE1_MASK |
           RCC_CFGR_PPRE2_MASK);
+    (void)wait_sysclk_hsi();
     RCC_CR &= ~RCC_CR_PLLON;
 
     g_clock_source = CLOCK_SOURCE_HSI_DIRECT;
