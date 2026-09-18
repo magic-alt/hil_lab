@@ -1,0 +1,17 @@
+; Explicit Arm Compiler 6 scatter file for STM32F429ZI.
+; Keep the vector table at the start of internal flash and make SRAM1/2
+; the default RW/ZI execution region.
+
+LR_IROM1 0x08000000 0x00200000
+{
+    ER_IROM1 0x08000000 0x00200000
+    {
+        *.o (RESET, +First)
+        .ANY (+RO)
+    }
+
+    RW_IRAM1 0x20000000 0x00030000
+    {
+        .ANY (+RW +ZI)
+    }
+}
