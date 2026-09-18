@@ -74,8 +74,27 @@ The current ABI is 2416 bytes:
 - three complementary-pair snapshots;
 - 128 recent edge records.
 
-The writer uses an even/odd `seq_lock`. Linux retries a snapshot when it sees
-an odd or changing sequence.
+The writer uses an even/odd `seq_lock`.
+
+For live capture, Linux does **not** copy the entire 2416-byte structure under
+one seqlock window. At 20 kHz complementary PWM the PRU may publish about
+80,000 edge events/s, so requiring the full 2 KiB edge ring to remain unchanged
+during a Python copy can starve indefinitely.
+
+The host reader therefore uses a split snapshot:
+
+1. copy only the fixed 368-byte statistics/control prefix under `seq_lock`;
+2. freeze `event_seq/ring_head/ring_count` from that prefix;
+3. copy only the requested recent ring records;
+4. re-read `event_seq` and reject/retry if enough new events arrived to wrap
+   and overwrite any requested slot.
+
+This keeps period/high/low/dead-time/count/fault statistics strongly consistent
+during live capture while retaining a bounded, consistency-checked recent-edge
+window.
+
+A full 128-record ring snapshot is intentionally rejected while capture is
+running; stop capture first if the complete ring is required.
 
 ## Measurement semantics
 
@@ -119,9 +138,12 @@ python3 hil_pwm_cli.py clear
 python3 hil_pwm_cli.py start
 python3 hil_pwm_cli.py status
 
+# Live: consistent summary plus the most recent 16 edges.
 sudo -E python3 hil_pwm_cli.py snapshot --ring-limit 16
 
+# For a completely frozen result/full ring, stop first, then snapshot.
 python3 hil_pwm_cli.py stop
+sudo -E python3 hil_pwm_cli.py snapshot --ring-limit 128
 ```
 
 `snapshot` needs access to `/dev/mem`; on the current BBB this normally
