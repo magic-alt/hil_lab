@@ -45,7 +45,7 @@ def main() -> int:
     if args.command in {"snapshot", "watch"}:
         if args.command == "snapshot":
             result = snapshot_to_dict(
-                read_consistent_snapshot(),
+                read_consistent_snapshot(ring_limit=args.ring_limit),
                 ring_limit=args.ring_limit,
             )
             print(json.dumps(result, indent=2, sort_keys=True))
@@ -54,7 +54,7 @@ def main() -> int:
         emitted = 0
         while args.count == 0 or emitted < args.count:
             result = snapshot_to_dict(
-                read_consistent_snapshot(),
+                read_consistent_snapshot(ring_limit=args.ring_limit),
                 ring_limit=args.ring_limit,
             )
             print(json.dumps(result, sort_keys=True), flush=True)
