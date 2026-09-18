@@ -166,6 +166,23 @@ The project creates a HEX file for each configuration, for example:
 MDK-ARM/Objects/20k_50_700ns/hil_pwm_20k_50_700ns.hex
 ```
 
+To build all seven Targets from a Windows command prompt:
+
+```bat
+cd boards\stm32f429i_disc1\MDK-ARM
+build_all.bat
+```
+
+The script uses `C:\Keil_v5\UV4\UV4.exe` by default. If Keil is installed
+elsewhere, set:
+
+```bat
+set KEIL_UVISION=D:\Keil_v5\UV4\UV4.exe
+build_all.bat
+```
+
+Per-target logs are written to `MDK-ARM\Logs\`.
+
 ## Connect to BBB B1
 
 Power both boards normally over USB and connect a common ground:
