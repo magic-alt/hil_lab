@@ -15,6 +15,7 @@ SYSTEM = BASE / "Src/system_stm32f4xx.c"
 STARTUP = BASE / "Startup/startup_stm32f429xx.s"
 PROJECT = BASE / "MDK-ARM/hil_pwm_stimulus.uvprojx"
 README = BASE / "README.md"
+BUILD_ALL = BASE / "MDK-ARM/build_all.bat"
 
 EXPECTED_TARGETS = {
     "20k_50_600ns": (500, 600, 1),
@@ -76,7 +77,7 @@ def parse_defines(raw: str) -> dict[str, str]:
 def main() -> int:
     errors: list[str] = []
 
-    for path in (PROFILE, REGS, MAIN, SYSTEM, STARTUP, PROJECT, README):
+    for path in (PROFILE, REGS, MAIN, SYSTEM, STARTUP, PROJECT, README, BUILD_ALL):
         if not path.is_file():
             errors.append(f"missing required Keil project file: {path.relative_to(ROOT)}")
     if errors:
@@ -90,6 +91,7 @@ def main() -> int:
     system = SYSTEM.read_text(encoding="utf-8")
     startup = STARTUP.read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
+    build_all = BUILD_ALL.read_text(encoding="utf-8")
 
     if (BASE / "platformio.ini").exists():
         errors.append("PlatformIO project must not exist; Keil MDK is authoritative")
@@ -211,6 +213,14 @@ def main() -> int:
     require(readme, r"20k_50_700ns", "default Keil Target documentation", errors)
     require(readme, r"P9_29", "BBB UH destination", errors)
     require(readme, r"P9_30", "BBB UL destination", errors)
+    require(readme, r"build_all\.bat", "Keil batch-build documentation", errors)
+    for target_name in EXPECTED_TARGETS:
+        require(
+            build_all,
+            re.escape(target_name),
+            f"build_all target {target_name}",
+            errors,
+        )
 
     if errors:
         for error in errors:
