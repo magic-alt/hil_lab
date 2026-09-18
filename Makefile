@@ -19,12 +19,13 @@ BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 
 .PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event \
 	dac-compile dac-test dac-pattern-test dac-lint \
-	board-constraints board-compile board-test board-lint clean
+	board-constraints board-compile board-test board-lint \
+	bbb-check bbb-pru-build clean
 
 all: verify
 
 verify: policy compile test lint dac-compile dac-test dac-pattern-test dac-lint \
-	board-constraints board-compile board-test board-lint
+	board-constraints board-compile board-test board-lint bbb-check
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -87,5 +88,13 @@ board-test: $(BUILD_DIR)
 board-lint:
 	$(VERILATOR) -DHIL_SIMULATION --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module axu2cgb_hil_top $(BOARD_RTL)
 
+bbb-check:
+	$(MAKE) -C boards/beaglebone_black check
+	$(PYTHON) tools/bbb_b0_static_check.py
+
+bbb-pru-build:
+	$(MAKE) -C boards/beaglebone_black pru0
+
 clean:
 	rm -rf $(BUILD_DIR)
+	$(MAKE) -C boards/beaglebone_black clean

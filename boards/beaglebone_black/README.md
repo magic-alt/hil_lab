@@ -1,21 +1,28 @@
 # BeagleBone Black / AM3358 PRU backend
 
-Status: **planned companion Digital-HIL backend**. See #11-#15.
+Status: **B0 implementation in progress**. See #11-#15.
 
-## Role
+BeagleBone Black is the companion Digital-HIL backend. ZU2CG/AXU2CGB remains the primary Full-HIL path for DAC/analog feedback, PMSM plant execution, custom ADC/DAC hardware and robotic-joint models.
 
-BeagleBone Black is used for deterministic controller-side digital testing:
+## B0 implemented software baseline
 
-- servo PWM capture and dead-time measurement;
-- ABZ encoder generation;
-- timestamped digital stimulus/fault GPIO;
-- rapid hardware regression against GD32/HPM servo controllers.
+The `feat/b0-bbb-pru-bringup` work establishes:
 
-It does not replace the ZU2CG/AXU2CGB Full-HIL backend.
+- PRU0 firmware built with TI PRU CGT + PRU Software Support Package;
+- remoteproc resource table and RPMsg port 30;
+- fixed 32-byte capability/timebase command protocol;
+- IEP 32-bit hardware timebase metadata;
+- local safe-state/watchdog behavior;
+- automatic remoteproc firmware install/start/stop script;
+- Python RPMsg client for HELLO/TIME/PING/SAFE/LOOPBACK;
+- temporary deterministic GPIO loopback using P9_31 -> P9_25;
+- software-only protocol/static checks suitable for normal GitHub Actions.
+
+Detailed target bring-up: [B0_BRINGUP.md](B0_BRINGUP.md).
 
 ## Real-time boundary
 
-Time-critical work must execute on PRU.
+Time-critical work executes on PRU. Linux is the control plane only.
 
 Linux may:
 
@@ -26,83 +33,37 @@ Linux may:
 
 Linux userspace must not bit-bang timing-critical PWM/ABZ/fault sequences as a substitute for PRU implementation.
 
-## Initial partition
-
-The final PRU split is frozen only after B0 timing/resource measurements.
-
-Reference direction:
+## B0 temporary PRU0 allocation
 
 ```text
-PRU0: capture-oriented
-  - PWM edges
-  - period/high/low
-  - complementary dead-time
-  - event counters
-
-PRU1: generation/event-oriented
-  - ABZ transitions
-  - timestamped DIO/fault events
-  - watchdog/safe-state handling
+PRU0
+├── IEP timebase
+├── RPMsg control plane
+├── P9_31 R30[0] loopback output
+├── P9_25 R31[7] loopback input
+└── watchdog / safe state
 ```
 
-If measurements show a different partition is more deterministic, implementation may change while preserving the common backend contract.
+This is a qualification fixture, not the final servo-DUT pin map.
 
-## Timing
-
-B0 must select and document the hardware timestamp source.
-
-Host-visible metadata includes:
-
-- tick frequency;
-- counter width;
-- rollover behavior;
-- firmware/API version.
-
-No test should assume a 5 ns timing quantum merely from the nominal PRU clock without physical characterization of the actual capture/generation path.
-
-## Pinmux and adapter
-
-Do not freeze a final P8/P9 DUT mapping until:
-
-- required PRU direct-I/O pins are identified;
-- onboard peripheral conflicts are checked;
-- boot/default states are checked;
-- the protected DUT adapter is reviewed.
-
-Raw BBB GPIO is 3.3 V logic and is not a universal servo interface.
-
-Use appropriate:
-
-- level translation;
-- buffering;
-- RS-422 line drivers for differential encoders;
-- isolation where grounding requires it;
-- relays/analog switches for protected disconnect/fault paths.
-
-Never connect raw BBB pins directly to 24/48 V brake or power-stage nodes.
-
-## Bring-up sequence
-
-1. B0 #11 — toolchain, remoteproc, transport, timebase, pinmux, safe state.
-2. B1 #12 — 20 kHz PWM/dead-time capture.
-3. B2 #13 — ABZ generator.
-4. B3 #14 — deterministic fault/stimulus scheduler.
-5. B4 #15 — common host API and pytest conformance.
-
-## Suggested future subtree
+After B0 hardware evidence is complete:
 
 ```text
-boards/beaglebone_black/
-├── README.md
-├── firmware/
-│   ├── common/
-│   ├── pru0_capture/
-│   └── pru1_stimulus/
-├── host/
-├── pinmux/
-└── tests/
-    ├── loopback/
-    └── hardware/
+B1: PWM capture/dead-time
+B2: ABZ generator
+B3: deterministic fault/stimulus GPIO
+B4: common backend/pytest conformance
 ```
 
-This layout is guidance for B0, not a requirement to commit empty directories.
+The final PRU0/PRU1 responsibility split remains open until B0/B1 timing measurements are available.
+
+## Safety
+
+Raw BBB GPIO is 3.3 V logic. Do not connect it directly to:
+
+- 24/48 V brake power;
+- DC bus or motor phases;
+- gate-driver power nodes;
+- destructive short/open injection paths.
+
+Final DUT wiring requires reviewed level translation, buffering/isolation and fault-insertion hardware.
