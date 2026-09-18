@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-DEFAULT_FIRMWARE_NAME = "hil-b0-pru0-fw"
+DEFAULT_FIRMWARE_NAME = "am335x-pru0-fw"
 PRU0_NAMES = ("4a334000.pru", "4a334000.pru0", "pruss-core0")
 
 
