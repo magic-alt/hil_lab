@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <pru_cfg.h>
 #include <pru_iep.h>
-#include <pru_mbox.h>
+#include <sys_mailbox.h>
 #include <pru_rpmsg.h>
 #include <pru_virtqueue.h>
 
@@ -15,6 +15,10 @@ volatile register uint32_t __R31;
 #define CHAN_NAME                   "rpmsg-pru"
 #define CHAN_DESC                   "hil-b0-pru0"
 #define CHAN_PORT                   (30u)
+
+/* AM335x PRU0 RPMsg mailbox assignment from the Linux PRUSS DT binding. */
+#define MB_FROM_ARM_HOST             (2u)
+#define MB_TO_ARM_HOST               (3u)
 
 /* B0 temporary loopback fixture only: P9_31 -> P9_25 jumper. */
 #define LOOPBACK_OUT_R30_BIT        (0u)  /* P9_31 pru0_r30[0] */
