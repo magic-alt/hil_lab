@@ -92,7 +92,7 @@ hil_lab/
 ├── boards/
 │   ├── zu2cg/                   AXU2CGB board integration
 │   ├── beaglebone_black/        PRU digital-HIL backend
-│   └── stm32f429i_disc1/        20 kHz complementary-PWM stimulus source
+│   └── stm32f429i_disc1/        Keil MDK multi-target 20 kHz PWM stimulus
 ├── docs/
 │   ├── architecture.md
 │   ├── backend-contract.md      shared behavioral contract
