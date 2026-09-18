@@ -41,7 +41,7 @@ def main() -> int:
     require(firmware, r"MB_TO_ARM_HOST\s+\(3u\)", "PRU0 PRU->ARM mailbox", errors)
     require(firmware, r"#define IEP_TICK_HZ\s+\(200000000u\)", "IEP tick metadata", errors)
     require(firmware, r"LOOPBACK_OUT_R30_BIT\s+\(0u\)", "P9_31 R30 mapping", errors)
-    require(firmware, r"LOOPBACK_IN_R31_BIT\\s+\\(1u\\)", "P9_29 R31 mapping", errors)
+    require(firmware, r"LOOPBACK_IN_R31_BIT\s+\(1u\)", "P9_29 R31 mapping", errors)
     require(firmware, r"WATCHDOG_TICKS", "watchdog", errors)
     require(firmware, r"force_safe\(\)", "safe-state invocation", errors)
 
