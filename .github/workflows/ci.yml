@@ -1,4 +1,4 @@
-name: HIL CI
+name: RTL CI
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  verilog:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
