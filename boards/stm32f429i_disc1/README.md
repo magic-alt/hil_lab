@@ -41,7 +41,7 @@ That keeps waveform configuration out of source-code forks.
 
 ## Keil requirements
 
-- Keil MDK-ARM / uVision with Arm Compiler 6.
+- Keil MDK-ARM / uVision with Arm Compiler 6. The project file was created with AC6.18 metadata, but the source does not depend on 6.18 specifically; if uVision reports that compiler version is unavailable, select any installed Arm Compiler 6 under **Options for Target -> Target -> ARM Compiler**.
 - Device: `STM32F429ZITx`.
 - CMSIS Device Family Pack: `Keil::STM32F4xx_DFP@3.1.1`.
 
@@ -57,7 +57,8 @@ configured directly with local register definitions.
 
 The startup file and system initialization file are committed with this
 repository, so the project does not depend on the Device:Startup component
-removed from newer STM32F4 DFP releases.
+removed from newer STM32F4 DFP releases. The startup source is assembled with
+uVision's Arm Compiler 6 legacy Arm-syntax assembler compatibility mode.
 
 ## Directory layout
 
