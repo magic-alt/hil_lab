@@ -237,3 +237,46 @@ sudo config-pin P9_29 pruin
 config-pin -q P9_31
 config-pin -q P9_29
 ```
+
+
+## Persistent loopback benchmark
+
+Do not benchmark deterministic PRU timing by repeatedly launching
+`python3 hil_pru_cli.py loopback` from `subprocess.run()`. That mostly
+measures Linux process startup and repeated RPMsg device open/close overhead.
+
+Use one persistent process and one persistent `/dev/rpmsg_pru30` file
+descriptor:
+
+```bash
+cd ~/hil_lab/boards/beaglebone_black/host
+
+python3 hil_pru_cli.py bench-loopback \
+  --count 1000 \
+  --warmup 10 \
+  --delay-us 1000 \
+  --width-us 1000 \
+  --timeout-us 5000
+```
+
+The benchmark performs HELLO once, keeps the RPMsg character device open, and
+then sends all loopback requests through the same session. It reports:
+
+- PRU observed rise latency;
+- PRU observed high width;
+- high-width error;
+- complete host command round-trip;
+- non-programmed round-trip time
+  (`command_rtt - delay - width`);
+- min / mean / p50 / p95 / p99 / max / standard deviation;
+- failure rate and achieved request rate.
+
+`non_programmed_rtt_us` is not a pure Linux number. It includes host Python,
+the RPMsg character driver, virtio/RPMsg transport, PRU command handling and
+the post-pulse response path. It is useful for quantifying control-plane
+overhead, while `rise_latency_us` and `observed_high_us` remain the
+real-time data-plane measurements.
+
+For B1 PWM capture, RPMsg must not be used once per PWM edge. Edge capture,
+timestamping and buffering stay in PRU; Linux/RPMsg configures the capture and
+drains snapshots/batches.

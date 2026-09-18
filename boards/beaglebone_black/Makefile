@@ -11,7 +11,7 @@ python-check:
 	$(PYTHON) -m py_compile $(HOST_DIR)/hil_pru_protocol.py $(HOST_DIR)/hil_pru_cli.py scripts/pru0_ctl.py
 
 protocol-test:
-	PYTHONPATH=$(HOST_DIR) $(PYTHON) -m unittest -v $(HOST_DIR)/test_hil_pru_protocol.py
+	PYTHONPATH=$(HOST_DIR) $(PYTHON) -m unittest discover -v -s $(HOST_DIR) -p 'test_*.py'
 
 shell-check:
 	sh -n pinmux/setup_b0_loopback.sh
