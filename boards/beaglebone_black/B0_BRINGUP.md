@@ -127,7 +127,7 @@ Stop PRU0 before changing the fixture if there is any doubt about the current fi
 
 ```bash
 cd boards/beaglebone_black
-sudo ./pinmux/setup_b0_loopback.sh
+sudo sh ./pinmux/setup_b0_loopback.sh
 ```
 
 Connect only:
@@ -218,3 +218,22 @@ Repository code can establish the implementation and automated software checks, 
 - P9_31 -> P9_29 loopback timestamps;
 - logic-analyzer timing comparison;
 - boot/stop/host-loss safe-state behavior.
+
+
+## Pinmux script portability
+
+The B0 pinmux helper is POSIX `/bin/sh` compatible and intentionally avoids Bash-only
+`pipefail`. On Debian, `/bin/sh` is commonly `dash`, so the supported invocation is:
+
+```bash
+sudo sh ./pinmux/setup_b0_loopback.sh
+```
+
+Equivalent manual commands are:
+
+```bash
+sudo config-pin P9_31 pruout
+sudo config-pin P9_29 pruin
+config-pin -q P9_31
+config-pin -q P9_29
+```
