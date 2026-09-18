@@ -1,61 +1,70 @@
 # BeagleBone Black / AM3358 PRU backend
 
-Status: **B0 implementation in progress**. See #11-#15.
+Status: **B0 runtime path validated; B1 PWM capture implementation in progress**. See #11-#15.
 
 BeagleBone Black is the companion Digital-HIL backend. ZU2CG/AXU2CGB remains the primary Full-HIL path for DAC/analog feedback, PMSM plant execution, custom ADC/DAC hardware and robotic-joint models.
 
-## B0 implemented software baseline
+## B0 validated baseline
 
-The `feat/b0-bbb-pru-bringup` work establishes:
+The real BBB has demonstrated:
 
-- PRU0 firmware built with TI PRU CGT + PRU Software Support Package;
-- remoteproc resource table and RPMsg port 30;
-- fixed 32-byte capability/timebase command protocol;
-- IEP 32-bit hardware timebase metadata;
-- local safe-state/watchdog behavior;
-- automatic remoteproc firmware install/start/stop script;
-- Python RPMsg client for HELLO/TIME/PING/SAFE/LOOPBACK;
-- temporary deterministic GPIO loopback using P9_31 -> P9_29;
-- software-only protocol/static checks suitable for normal GitHub Actions.
+- reproducible PRU0 build with TI PRU CGT + PSSP v6.0;
+- remoteproc load/start/stop;
+- RPMsg port 30 and `/dev/rpmsg_pru30`;
+- HELLO/TIME/PING protocol exchange;
+- IEP 200 MHz / 32-bit timebase metadata;
+- deterministic P9_31 -> P9_29 loopback;
+- persistent 1000-sample benchmark with 0 failures;
+- PRU-side rise observation latency 0.245 us and 1000.085 us measured high width for the 1 ms loopback fixture.
 
 Detailed target bring-up: [B0_BRINGUP.md](B0_BRINGUP.md).
 
-## Real-time boundary
+## B1 PWM capture architecture
 
-Time-critical work executes on PRU. Linux is the control plane only.
-
-Linux may:
-
-- load/start/stop firmware;
-- configure tests;
-- exchange parameters/results;
-- log/report data.
-
-Linux userspace must not bit-bang timing-critical PWM/ABZ/fault sequences as a substitute for PRU implementation.
-
-## B0 temporary PRU0 allocation
+B1 turns PRU0 into the capture/data-plane engine.
 
 ```text
-PRU0
-├── IEP timebase
-├── RPMsg control plane
-├── P9_31 R30[0] loopback output
-├── P9_29 R31[1] loopback input
-└── watchdog / safe state
+six direct R31 inputs
+        |
+        v
+single R31 sample
+        |
+edge bitmap
+        |
+IEP timestamp only on change
+        |
+period / high / low
+dead-time H->L / L->H
+overlap + min-DT latches
+        |
+PRUSS shared RAM snapshot + edge ring
+        |
+Linux /dev/mem batch/snapshot reader
 ```
 
-This is a qualification fixture, not the final servo-DUT pin map.
+RPMsg remains the control plane only:
 
-After B0 hardware evidence is complete:
+- configure minimum dead-time;
+- start/stop capture;
+- clear counters;
+- query capture status.
+
+Individual PWM edges are never sent as one RPMsg each.
+
+Detailed B1 notes: [B1_PWM_CAPTURE.md](B1_PWM_CAPTURE.md).
+
+## B1 fixed first-board pin map
 
 ```text
-B1: PWM capture/dead-time
-B2: ABZ generator
-B3: deterministic fault/stimulus GPIO
-B4: common backend/pytest conformance
+UH -> P9_29 -> PRU0 R31[1]
+UL -> P9_30 -> PRU0 R31[2]
+VH -> P9_28 -> PRU0 R31[3]
+VL -> P9_27 -> PRU0 R31[5]
+WH -> P8_16 -> PRU0 R31[14]
+WL -> P8_15 -> PRU0 R31[15]
 ```
 
-The final PRU0/PRU1 responsibility split remains open until B0/B1 timing measurements are available.
+This map deliberately avoids P9_25 and the more awkward P9_41/P9_42 mux cases.
 
 ## Safety
 

@@ -16,8 +16,11 @@ from hil_pru_protocol import (
     CAP_FORCE_SAFE,
     CAP_GPIO_LOOPBACK,
     CAP_RPMSG,
+    CAP_SHARED_SNAPSHOT,
     CAP_TIMEBASE,
     CAP_WATCHDOG,
+    CAP_PWM_CAPTURE,
+    CAP_PWM_COMPLEMENTARY_MONITOR,
     MSG_FORCE_SAFE,
     MSG_GPIO_LOOPBACK,
     MSG_HELLO,
@@ -34,6 +37,9 @@ CAP_NAMES = {
     CAP_GPIO_LOOPBACK: "gpio_loopback",
     CAP_FORCE_SAFE: "force_safe",
     CAP_WATCHDOG: "watchdog",
+    CAP_PWM_CAPTURE: "pwm_capture",
+    CAP_PWM_COMPLEMENTARY_MONITOR: "pwm_complementary_monitor",
+    CAP_SHARED_SNAPSHOT: "shared_snapshot",
 }
 
 
