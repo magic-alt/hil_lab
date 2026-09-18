@@ -4,36 +4,88 @@
 #include "stm32f429_regs.h"
 
 extern uint32_t SystemCoreClock;
-void SystemCoreClockUpdate(void);
 
-static void clock_180mhz_init(void);
-static void gpio_init(void);
-static void tim8_pwm_init(void);
-static uint32_t deadtime_ns_to_dtg(uint32_t deadtime_ns);
+#define CLOCK_SOURCE_HSE_PLL    (1UL)
+#define CLOCK_SOURCE_HSI_PLL    (2UL)
+#define CLOCK_SOURCE_HSI_DIRECT (3UL)
+
+#define CLOCK_FAULT_HSI_TIMEOUT    (1UL << 0)
+#define CLOCK_FAULT_HSE_TIMEOUT    (1UL << 1)
+#define CLOCK_FAULT_PLL_TIMEOUT    (1UL << 2)
+#define CLOCK_FAULT_OD_TIMEOUT     (1UL << 3)
+#define CLOCK_FAULT_ODSW_TIMEOUT   (1UL << 4)
+#define CLOCK_FAULT_SWITCH_TIMEOUT (1UL << 5)
+
+#define CLOCK_WAIT_LOOPS (1000000UL)
+
+static void status_gpio_init(void);
+static uint32_t clock_init(void);
+static void pwm_gpio_init(void);
+static void tim8_pwm_init(uint32_t timer_clock_hz);
+static uint32_t deadtime_ns_to_dtg(uint32_t deadtime_ns, uint32_t timer_hz);
+static uint32_t dtg_to_ticks(uint32_t dtg);
 static void fail_stop(void);
 
+volatile uint32_t g_boot_stage;
 volatile uint32_t g_pwm_profile_id = PWM_PROFILE_ID;
 volatile uint32_t g_pwm_frequency_hz = PWM_FREQUENCY_HZ;
 volatile uint32_t g_pwm_duty_permille = PWM_DUTY_PERMILLE;
 volatile uint32_t g_pwm_deadtime_ns = PWM_DEADTIME_NS;
 volatile uint32_t g_pwm_deadtime_dtg;
+volatile uint32_t g_pwm_deadtime_actual_ns;
+volatile uint32_t g_pwm_period_ticks;
+volatile uint32_t g_pwm_ccr1;
+volatile uint32_t g_clock_source;
+volatile uint32_t g_clock_fault_flags;
+volatile uint32_t g_sysclk_hz;
+volatile uint32_t g_tim8_clock_hz;
+volatile uint32_t g_tim8_cr1_snapshot;
+volatile uint32_t g_tim8_ccer_snapshot;
+volatile uint32_t g_tim8_bdtr_snapshot;
 
 static uint32_t div_round_closest_u64(uint64_t numerator, uint64_t denominator)
 {
     return (uint32_t)((numerator + (denominator / 2ULL)) / denominator);
 }
 
+static uint32_t wait_rcc_cr_set(uint32_t mask)
+{
+    uint32_t timeout = CLOCK_WAIT_LOOPS;
+
+    while (((RCC_CR & mask) == 0UL) && (timeout-- != 0UL)) {
+    }
+
+    return ((RCC_CR & mask) != 0UL) ? 1UL : 0UL;
+}
+
+static uint32_t wait_pwr_csr_set(uint32_t mask)
+{
+    uint32_t timeout = CLOCK_WAIT_LOOPS;
+
+    while (((PWR_CSR & mask) == 0UL) && (timeout-- != 0UL)) {
+    }
+
+    return ((PWR_CSR & mask) != 0UL) ? 1UL : 0UL;
+}
+
+static uint32_t wait_sysclk_pll(void)
+{
+    uint32_t timeout = CLOCK_WAIT_LOOPS;
+
+    while (((RCC_CFGR & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_PLL) &&
+           (timeout-- != 0UL)) {
+    }
+
+    return ((RCC_CFGR & RCC_CFGR_SWS_MASK) == RCC_CFGR_SWS_PLL) ? 1UL : 0UL;
+}
+
 /*
- * STM32F429 RM0090 TIMx_BDTR.DTG encoding with TIM8 CKD=DIV1:
- *   0xx: DT = DTG * tDTS
- *   10x: DT = (64 + DTG[5:0]) * 2 * tDTS
- *   110: DT = (32 + DTG[4:0]) * 8 * tDTS
- *   111: DT = (32 + DTG[4:0]) * 16 * tDTS
+ * STM32F429 RM0090 TIMx_BDTR.DTG encoding with CKD=DIV1.
  */
-static uint32_t deadtime_ns_to_dtg(uint32_t deadtime_ns)
+static uint32_t deadtime_ns_to_dtg(uint32_t deadtime_ns, uint32_t timer_hz)
 {
     uint32_t ticks = div_round_closest_u64(
-        (uint64_t)deadtime_ns * (uint64_t)HIL_APB2_TIMER_HZ,
+        (uint64_t)deadtime_ns * (uint64_t)timer_hz,
         1000000000ULL);
 
     if (ticks <= 127U) {
@@ -74,23 +126,92 @@ static uint32_t deadtime_ns_to_dtg(uint32_t deadtime_ns)
     }
 }
 
+static uint32_t dtg_to_ticks(uint32_t dtg)
+{
+    if ((dtg & 0x80U) == 0U) {
+        return dtg;
+    }
+    if ((dtg & 0xC0U) == 0x80U) {
+        return (64U + (dtg & 0x3FU)) * 2U;
+    }
+    if ((dtg & 0xE0U) == 0xC0U) {
+        return (32U + (dtg & 0x1FU)) * 8U;
+    }
+    return (32U + (dtg & 0x1FU)) * 16U;
+}
+
 int main(void)
 {
-    clock_180mhz_init();
-    gpio_init();
-    tim8_pwm_init();
+    g_boot_stage = 1UL;
 
-    /* LD3 green (PG13) indicates that TIM8 outputs are active. */
+    /*
+     * Configure LEDs before the high-speed clock tree. Red means boot/clock
+     * fallback; green means TIM8 PWM has reached the active state.
+     */
+    status_gpio_init();
+    g_boot_stage = 2UL;
+
+    g_tim8_clock_hz = clock_init();
+    g_boot_stage = 3UL;
+
+    pwm_gpio_init();
+    g_boot_stage = 4UL;
+
+    tim8_pwm_init(g_tim8_clock_hz);
+    g_boot_stage = 5UL;
+
+    /* Green = PWM active. Red remains on only when external HSE-MCO was lost. */
     GPIO_ODR(GPIOG_BASE) |= (1UL << 13);
+    if (g_clock_source == CLOCK_SOURCE_HSE_PLL) {
+        GPIO_ODR(GPIOG_BASE) &= ~(1UL << 14);
+    } else {
+        GPIO_ODR(GPIOG_BASE) |= (1UL << 14);
+    }
 
     for (;;) {
         cpu_wfi();
     }
 }
 
-static void clock_180mhz_init(void)
+static void status_gpio_init(void)
 {
-    uint32_t timeout;
+    uint32_t value;
+
+    RCC_AHB1ENR |= RCC_AHB1ENR_GPIOGEN;
+    (void)RCC_AHB1ENR;
+
+    value = GPIO_MODER(GPIOG_BASE);
+    value &= ~((3UL << (13U * 2U)) | (3UL << (14U * 2U)));
+    value |=  ((1UL << (13U * 2U)) | (1UL << (14U * 2U)));
+    GPIO_MODER(GPIOG_BASE) = value;
+
+    GPIO_OTYPER(GPIOG_BASE) &= ~((1UL << 13) | (1UL << 14));
+    GPIO_PUPDR(GPIOG_BASE) &=
+        ~((3UL << (13U * 2U)) | (3UL << (14U * 2U)));
+
+    /* Booting: red on, green off. */
+    GPIO_ODR(GPIOG_BASE) &= ~(1UL << 13);
+    GPIO_ODR(GPIOG_BASE) |=  (1UL << 14);
+}
+
+static uint32_t clock_init(void)
+{
+    uint32_t pll_m;
+    uint32_t use_hse;
+
+    g_clock_fault_flags = 0UL;
+    g_clock_source = CLOCK_SOURCE_HSI_DIRECT;
+    g_sysclk_hz = HIL_HSI_HZ;
+
+    /*
+     * HSI is the guaranteed reset clock. Keep it enabled as the recovery path
+     * even when the preferred ST-LINK MCO/HSE input is available.
+     */
+    RCC_CR |= RCC_CR_HSION;
+    if (wait_rcc_cr_set(RCC_CR_HSIRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_HSI_TIMEOUT;
+        fail_stop();
+    }
 
     RCC_APB1ENR |= RCC_APB1ENR_PWREN;
     (void)RCC_APB1ENR;
@@ -103,77 +224,105 @@ static void clock_180mhz_init(void)
         FLASH_ACR_ICEN |
         FLASH_ACR_DCEN;
 
-    /* STM32F429I-DISC1 factory routing: ST-LINK MCO 8 MHz -> PH0/OSC_IN. */
+    /*
+     * Preferred clock:
+     * STM32F429I-DISC1 factory routing can supply fixed 8 MHz ST-LINK MCO to
+     * PH0/OSC_IN. A modified board may not have that solder-bridge route, so
+     * HSE readiness is optional rather than a fatal boot condition.
+     */
+    RCC_CR &= ~RCC_CR_HSEON;
     RCC_CR |= RCC_CR_HSEBYP;
     RCC_CR |= RCC_CR_HSEON;
-    timeout = 1000000UL;
-    while (((RCC_CR & RCC_CR_HSERDY) == 0UL) && (timeout-- != 0UL)) {
-    }
-    if ((RCC_CR & RCC_CR_HSERDY) == 0UL) {
-        fail_stop();
+
+    use_hse = wait_rcc_cr_set(RCC_CR_HSERDY);
+    if (use_hse != 0UL) {
+        pll_m = 8UL;
+        g_clock_source = CLOCK_SOURCE_HSE_PLL;
+    } else {
+        pll_m = 16UL;
+        g_clock_source = CLOCK_SOURCE_HSI_PLL;
+        g_clock_fault_flags |= CLOCK_FAULT_HSE_TIMEOUT;
     }
 
     RCC_CR &= ~RCC_CR_PLLON;
-    while ((RCC_CR & RCC_CR_PLLRDY) != 0UL) {
+    {
+        uint32_t timeout = CLOCK_WAIT_LOOPS;
+        while (((RCC_CR & RCC_CR_PLLRDY) != 0UL) && (timeout-- != 0UL)) {
+        }
     }
 
     RCC_PLLCFGR =
-        (8UL << 0) |
+        (pll_m << 0) |
         (360UL << 6) |
         (0UL << 16) |
-        RCC_PLLCFGR_PLLSRC_HSE |
+        ((use_hse != 0UL) ? RCC_PLLCFGR_PLLSRC_HSE : 0UL) |
         (7UL << 24);
 
     RCC_CR |= RCC_CR_PLLON;
-    timeout = 1000000UL;
-    while (((RCC_CR & RCC_CR_PLLRDY) == 0UL) && (timeout-- != 0UL)) {
-    }
-    if ((RCC_CR & RCC_CR_PLLRDY) == 0UL) {
-        fail_stop();
+    if (wait_rcc_cr_set(RCC_CR_PLLRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_PLL_TIMEOUT;
+        goto use_direct_hsi;
     }
 
     PWR_CR |= PWR_CR_ODEN;
-    timeout = 1000000UL;
-    while (((PWR_CSR & PWR_CSR_ODRDY) == 0UL) && (timeout-- != 0UL)) {
-    }
-    if ((PWR_CSR & PWR_CSR_ODRDY) == 0UL) {
-        fail_stop();
+    if (wait_pwr_csr_set(PWR_CSR_ODRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_OD_TIMEOUT;
+        goto use_direct_hsi;
     }
 
     PWR_CR |= PWR_CR_ODSWEN;
-    timeout = 1000000UL;
-    while (((PWR_CSR & PWR_CSR_ODSWRDY) == 0UL) && (timeout-- != 0UL)) {
-    }
-    if ((PWR_CSR & PWR_CSR_ODSWRDY) == 0UL) {
-        fail_stop();
+    if (wait_pwr_csr_set(PWR_CSR_ODSWRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_ODSW_TIMEOUT;
+        goto use_direct_hsi;
     }
 
     RCC_CFGR =
-        (RCC_CFGR & ~((7UL << 10) | (7UL << 13) | 3UL)) |
+        (RCC_CFGR &
+         ~(RCC_CFGR_SW_MASK |
+           RCC_CFGR_HPRE_MASK |
+           RCC_CFGR_PPRE1_MASK |
+           RCC_CFGR_PPRE2_MASK)) |
         RCC_CFGR_PPRE1_DIV4 |
         RCC_CFGR_PPRE2_DIV2 |
         RCC_CFGR_SW_PLL;
 
-    timeout = 1000000UL;
-    while (((RCC_CFGR & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_PLL) &&
-           (timeout-- != 0UL)) {
-    }
-    if ((RCC_CFGR & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_PLL) {
-        fail_stop();
+    if (wait_sysclk_pll() == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_SWITCH_TIMEOUT;
+        goto use_direct_hsi;
     }
 
-    SystemCoreClockUpdate();
-    SystemCoreClock = HIL_SYSCLK_HZ;
+    SystemCoreClock = HIL_PLL_SYSCLK_HZ;
+    g_sysclk_hz = HIL_PLL_SYSCLK_HZ;
+
+    /*
+     * APB2 is SYSCLK/2, and STM32F4 timer clocks are doubled when APB
+     * prescaler is greater than 1. Therefore TIM8 runs at SYSCLK = 180 MHz.
+     */
+    return HIL_PLL_SYSCLK_HZ;
+
+use_direct_hsi:
+    /*
+     * Last-resort functional mode. This still produces 20 kHz PWM, but
+     * dead-time resolution becomes 62.5 ns and HSI absolute accuracy applies.
+     */
+    RCC_CFGR &=
+        ~(RCC_CFGR_SW_MASK |
+          RCC_CFGR_HPRE_MASK |
+          RCC_CFGR_PPRE1_MASK |
+          RCC_CFGR_PPRE2_MASK);
+    RCC_CR &= ~RCC_CR_PLLON;
+
+    g_clock_source = CLOCK_SOURCE_HSI_DIRECT;
+    SystemCoreClock = HIL_HSI_HZ;
+    g_sysclk_hz = HIL_HSI_HZ;
+    return HIL_HSI_HZ;
 }
 
-static void gpio_init(void)
+static void pwm_gpio_init(void)
 {
     uint32_t value;
 
-    RCC_AHB1ENR |=
-        RCC_AHB1ENR_GPIOAEN |
-        RCC_AHB1ENR_GPIOCEN |
-        RCC_AHB1ENR_GPIOGEN;
+    RCC_AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOCEN;
     (void)RCC_AHB1ENR;
 
     /* PC6 = AF3 TIM8_CH1, very-high speed, push-pull, no pull. */
@@ -203,49 +352,75 @@ static void gpio_init(void)
     GPIO_AFRL(GPIOA_BASE) =
         (GPIO_AFRL(GPIOA_BASE) & ~(0xFUL << (5U * 4U))) |
         (3UL << (5U * 4U));
-
-    /* PG13 = LD3 green status LED. */
-    value = GPIO_MODER(GPIOG_BASE);
-    value &= ~(3UL << (13U * 2U));
-    value |=  (1UL << (13U * 2U));
-    GPIO_MODER(GPIOG_BASE) = value;
-    GPIO_OTYPER(GPIOG_BASE) &= ~(1UL << 13);
-    GPIO_PUPDR(GPIOG_BASE) &= ~(3UL << (13U * 2U));
-    GPIO_ODR(GPIOG_BASE) &= ~(1UL << 13);
 }
 
-static void tim8_pwm_init(void)
+static void tim8_pwm_init(uint32_t timer_clock_hz)
 {
+    uint32_t period_ticks;
+    uint32_t duty_ticks;
     uint32_t dtg;
+    uint32_t dead_ticks;
+
+    if ((timer_clock_hz == 0UL) ||
+        ((timer_clock_hz % PWM_FREQUENCY_HZ) != 0UL)) {
+        fail_stop();
+    }
+
+    period_ticks = timer_clock_hz / PWM_FREQUENCY_HZ;
+    duty_ticks = div_round_closest_u64(
+        (uint64_t)period_ticks * (uint64_t)PWM_DUTY_PERMILLE,
+        1000ULL);
+
+    if ((period_ticks < 2UL) ||
+        (period_ticks > 65536UL) ||
+        (duty_ticks == 0UL) ||
+        (duty_ticks >= period_ticks)) {
+        fail_stop();
+    }
+
+    dtg = deadtime_ns_to_dtg(PWM_DEADTIME_NS, timer_clock_hz);
+    dead_ticks = dtg_to_ticks(dtg);
+
+    g_pwm_period_ticks = period_ticks;
+    g_pwm_ccr1 = duty_ticks;
+    g_pwm_deadtime_dtg = dtg;
+    g_pwm_deadtime_actual_ns = div_round_closest_u64(
+        (uint64_t)dead_ticks * 1000000000ULL,
+        (uint64_t)timer_clock_hz);
 
     RCC_APB2ENR |= RCC_APB2ENR_TIM8EN;
     (void)RCC_APB2ENR;
 
     TIM8_CR1 = 0UL;
     TIM8_PSC = 0UL;
-    TIM8_ARR = HIL_PWM_ARR;
-    TIM8_CCR1 = HIL_PWM_CCR1;
+    TIM8_ARR = period_ticks - 1UL;
+    TIM8_CCR1 = duty_ticks;
 
-    TIM8_CCMR1 =
-        TIM_CCMR1_OC1PE |
-        TIM_CCMR1_OC1M_PWM1;
+    TIM8_CCMR1 = TIM_CCMR1_OC1PE | TIM_CCMR1_OC1M_PWM1;
 
     /* Active-high CH1 and active-high complementary CH1N. */
     TIM8_CCER = TIM_CCER_CC1E | TIM_CCER_CC1NE;
 
-    dtg = deadtime_ns_to_dtg(PWM_DEADTIME_NS);
-    g_pwm_deadtime_dtg = dtg;
     TIM8_BDTR = (dtg & 0xFFUL) | TIM_BDTR_MOE;
 
     TIM8_CR1 = TIM_CR1_ARPE;
     TIM8_EGR = TIM_EGR_UG;
     TIM8_CR1 |= TIM_CR1_CEN;
+
+    g_tim8_cr1_snapshot = TIM8_CR1;
+    g_tim8_ccer_snapshot = TIM8_CCER;
+    g_tim8_bdtr_snapshot = TIM8_BDTR;
 }
 
 static void fail_stop(void)
 {
     TIM8_BDTR = 0UL;
+
+    /* Red on, green off. */
+    RCC_AHB1ENR |= RCC_AHB1ENR_GPIOGEN;
     GPIO_ODR(GPIOG_BASE) &= ~(1UL << 13);
+    GPIO_ODR(GPIOG_BASE) |=  (1UL << 14);
+
     for (;;) {
     }
 }
