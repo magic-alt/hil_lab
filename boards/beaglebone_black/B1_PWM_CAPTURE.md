@@ -194,9 +194,15 @@ Default waveform:
 3.3 V logic
 ```
 
-The project also includes 600/700/800 ns dead-time profiles and
-5/25/50/75/95% duty profiles for the B1 sweep. See
-`boards/stm32f429i_disc1/README.md`.
+Open the native Keil project:
+
+```text
+boards/stm32f429i_disc1/MDK-ARM/hil_pwm_stimulus.uvprojx
+```
+
+Use the uVision Target selector to switch between 600/700/800 ns dead-time and
+5/25/50/75/95% duty configurations. See
+`boards/stm32f429i_disc1/README.md` for the full Keil workflow.
 
 ## Physical verification sequence
 

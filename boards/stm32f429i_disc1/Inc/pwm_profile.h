@@ -15,6 +15,10 @@
 #define PWM_DEADTIME_NS       (700UL)
 #endif
 
+#ifndef PWM_PROFILE_ID
+#define PWM_PROFILE_ID        (0UL)
+#endif
+
 #define HIL_SYSCLK_HZ         (180000000UL)
 #define HIL_APB2_TIMER_HZ     (180000000UL)
 #define HIL_PWM_PERIOD_TICKS  (HIL_APB2_TIMER_HZ / PWM_FREQUENCY_HZ)
