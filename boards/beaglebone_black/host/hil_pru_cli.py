@@ -116,7 +116,7 @@ def main() -> int:
     sub.add_parser("ping")
     sub.add_parser("safe")
 
-    loop = sub.add_parser("loopback", help="schedule P9_31 pulse and measure jumper on P9_25")
+    loop = sub.add_parser("loopback", help="schedule P9_31 pulse and measure jumper on P9_29")
     loop.add_argument("--delay-us", type=float, default=1000.0)
     loop.add_argument("--width-us", type=float, default=1000.0)
     loop.add_argument("--timeout-us", type=float, default=5000.0)
