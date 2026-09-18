@@ -54,8 +54,7 @@ def find_pru1_remoteproc(explicit: str | None = None) -> Path:
 
 
 def write_control(path: Path, value: str) -> None:
-    path.write_text(value + "
-", encoding="utf-8")
+    path.write_text(value + "\n", encoding="utf-8")
 
 
 def state(remoteproc: Path) -> str:
