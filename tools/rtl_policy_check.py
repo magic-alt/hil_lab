@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RTL_ROOTS = [
     ROOT / "rtl",
     ROOT / "boards" / "zu2cg" / "rtl",
+    ROOT / "boards" / "zynq7010" / "rtl",
 ]
 
 FORBIDDEN = {
