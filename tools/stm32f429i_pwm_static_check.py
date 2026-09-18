@@ -16,6 +16,7 @@ STARTUP = BASE / "Startup/startup_stm32f429xx.s"
 PROJECT = BASE / "MDK-ARM/hil_pwm_stimulus.uvprojx"
 README = BASE / "README.md"
 BUILD_ALL = BASE / "MDK-ARM/build_all.bat"
+FLASH_BAT = BASE / "MDK-ARM/flash.bat"
 SCATTER = BASE / "MDK-ARM/stm32f429_flash.sct"
 
 EXPECTED_TARGETS = {
@@ -78,7 +79,7 @@ def parse_defines(raw: str) -> dict[str, str]:
 def main() -> int:
     errors: list[str] = []
 
-    for path in (PROFILE, REGS, MAIN, SYSTEM, STARTUP, PROJECT, README, BUILD_ALL, SCATTER):
+    for path in (PROFILE, REGS, MAIN, SYSTEM, STARTUP, PROJECT, README, BUILD_ALL, FLASH_BAT, SCATTER):
         if not path.is_file():
             errors.append(f"missing required Keil project file: {path.relative_to(ROOT)}")
     if errors:
@@ -93,6 +94,7 @@ def main() -> int:
     startup = STARTUP.read_text(encoding="utf-8")
     readme = README.read_text(encoding="utf-8")
     build_all = BUILD_ALL.read_text(encoding="utf-8")
+    flash_bat = FLASH_BAT.read_text(encoding="utf-8")
     scatter = SCATTER.read_text(encoding="utf-8")
 
     if (BASE / "platformio.ini").exists():
@@ -166,6 +168,10 @@ def main() -> int:
             device = target.findtext("./TargetOption/TargetCommonOption/Device", default="")
             pack = target.findtext("./TargetOption/TargetCommonOption/PackID", default="")
             ac6 = target.findtext("uAC6", default="")
+            target_dll = target.findtext("./TargetOption/DllOption/TargetDllName", default="")
+            use_target_dll = target.findtext("./TargetOption/Utilities/Flash1/UseTargetDll", default="")
+            update_flash_before_debug = target.findtext("./TargetOption/Utilities/Flash1/UpdateFlashBeforeDebugging", default="")
+            flash2 = target.findtext("./TargetOption/Utilities/Flash2", default="")
             clang_as = target.findtext("./TargetOption/TargetArmAds/Aads/ClangAsOpt", default="")
             output = target.findtext("./TargetOption/TargetCommonOption/OutputDirectory", default="")
             hex_enable = target.findtext("./TargetOption/TargetCommonOption/CreateHexFile", default="")
@@ -184,6 +190,14 @@ def main() -> int:
                 errors.append(f"{name}: wrong DFP {pack}")
             if ac6 != "1":
                 errors.append(f"{name}: Arm Compiler 6 is not enabled")
+            if target_dll != "SARMCM3.DLL":
+                errors.append(f"{name}: non-portable target DLL {target_dll!r}")
+            if use_target_dll != "0":
+                errors.append(f"{name}: repository project must not require a hardware debugger DLL")
+            if update_flash_before_debug != "0":
+                errors.append(f"{name}: repository project must not auto-flash before debug")
+            if flash2 != r"BIN\UL2CM3.DLL":
+                errors.append(f"{name}: unexpected portable flash DLL {flash2!r}")
             if clang_as != "4":
                 errors.append(f"{name}: startup assembler is not in AC6 legacy Arm-syntax mode")
             if name not in output:
@@ -228,6 +242,9 @@ def main() -> int:
     require(readme, r"P9_29", "BBB UH destination", errors)
     require(readme, r"P9_30", "BBB UL destination", errors)
     require(readme, r"build_all\.bat", "Keil batch-build documentation", errors)
+    forbid(PROJECT.read_text(encoding="utf-8"), r"ST-LINKIII-KEIL_SWO\.dll", "hard-coded ST-Link debugger DLL", errors)
+    require(flash_bat, r"STM32_Programmer_CLI\.exe", "STM32CubeProgrammer flash helper", errors)
+    require(flash_bat, r"-c port=SWD -w", "SWD flash command", errors)
     for target_name in EXPECTED_TARGETS:
         require(
             build_all,
