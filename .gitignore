@@ -27,6 +27,7 @@
 
 # Local build and Python
 build/
+**/gen/
 __pycache__/
 *.py[cod]
 .pytest_cache/
