@@ -44,6 +44,8 @@
 #define SCB_VTOR        REG32(0xE000ED08UL)
 #define SCB_CPACR       REG32(0xE000ED88UL)
 
+#define RCC_CR_HSION        (1UL << 0)
+#define RCC_CR_HSIRDY       (1UL << 1)
 #define RCC_CR_HSEON        (1UL << 16)
 #define RCC_CR_HSERDY       (1UL << 17)
 #define RCC_CR_HSEBYP       (1UL << 18)
@@ -69,7 +71,12 @@
 #define PWR_CSR_ODRDY       (1UL << 16)
 #define PWR_CSR_ODSWRDY     (1UL << 17)
 
+#define RCC_CFGR_SW_HSI     (0UL << 0)
 #define RCC_CFGR_SW_PLL     (2UL << 0)
+#define RCC_CFGR_SW_MASK    (3UL << 0)
+#define RCC_CFGR_HPRE_MASK  (15UL << 4)
+#define RCC_CFGR_PPRE1_MASK (7UL << 10)
+#define RCC_CFGR_PPRE2_MASK (7UL << 13)
 #define RCC_CFGR_SWS_MASK   (3UL << 2)
 #define RCC_CFGR_SWS_PLL    (2UL << 2)
 #define RCC_CFGR_PPRE1_DIV4 (5UL << 10)
