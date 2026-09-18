@@ -71,6 +71,8 @@ RW/ZI region in SRAM at `0x20000000`. This avoids uVision auto-scatter ambiguity
 that can otherwise produce `Scatter Error: no default 'Read/Write' range selected`
 on some MDK/Compiler 6 installations.
 
+In every Keil Target, **Use Memory Layout from Target Dialog is disabled** (`umfTarg=0`) and the explicit scatter file is enabled (`useFile=1`). If `umfTarg` is left at `1`, uVision ignores the repository scatter file and tries to generate/use an `Objects\\<target>\\*.sct` file instead.
+
 ## Directory layout
 
 ```text
