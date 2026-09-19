@@ -20,7 +20,7 @@ Recommended order:
 
 1. [x] rtl/time/hil_timebase.v -> rtl/common/timebase/
 2. [x] capture-only PWM/encoder blocks -> rtl/capture/
-3. [ ] PWM/ABZ/SSI/SPI generators -> rtl/generator/
+3. [x] PWM/ABZ/SSI/SPI generators -> rtl/generator/
 4. [ ] rtl/io/dio_event_scheduler.v -> rtl/scenario/
 5. [ ] rtl/motor plant models -> rtl/plant/
 6. [ ] reusable fault latches/queues/snapshot/FIFO helpers -> rtl/common/{fault,snapshot,fifo}/
@@ -68,3 +68,7 @@ The following legacy source paths are now forbidden by `architecture/manifest.js
 - `rtl/encoder/ssi_encoder_master_capture.v`.
 
 Module names and behavior are unchanged; this is a source-taxonomy migration only.
+
+## Phase 3 completion invariant
+
+The legacy `rtl/pwm/` and `rtl/encoder/` trees are now forbidden by the architecture gate. Their generator/emulator sources moved without module or logic changes to `rtl/generator/`.
