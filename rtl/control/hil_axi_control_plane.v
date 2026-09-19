@@ -126,6 +126,26 @@ module hil_axi_control_plane #(
 
     wire write_commit;
     wire fifo_clear;
+    wire [31:0] control_current;
+    wire [31:0] control_write_merged;
+    wire [31:0] event_mask_write_merged;
+    wire [31:0] event_value_write_merged;
+    wire [31:0] event_id_write_merged;
+
+    assign control_current =
+        {27'd0, cfg_abz_direction_forward, cfg_abz_enable,
+         1'b0, cfg_force_safe_sw, cfg_hil_enable};
+    assign control_write_merged =
+        apply_wstrb(control_current, wdata_hold, wstrb_hold);
+    assign event_mask_write_merged =
+        apply_wstrb({{(32-DIO_WIDTH){1'b0}}, event_stage_mask},
+                    wdata_hold, wstrb_hold);
+    assign event_value_write_merged =
+        apply_wstrb({{(32-DIO_WIDTH){1'b0}}, event_stage_value},
+                    wdata_hold, wstrb_hold);
+    assign event_id_write_merged =
+        apply_wstrb({{(32-EVENT_ID_WIDTH){1'b0}}, event_stage_id},
+                    wdata_hold, wstrb_hold);
 
     assign cfg_force_safe = cfg_force_safe_sw | external_force_safe;
     assign fifo_clear = cfg_force_safe;
@@ -227,24 +247,12 @@ module hil_axi_control_plane #(
             if (write_commit) begin
                 case (awaddr_hold[11:0])
                     REG_CONTROL: begin
-                        cfg_hil_enable <= apply_wstrb(
-                            {27'd0, cfg_abz_direction_forward, cfg_abz_enable,
-                             1'b0, cfg_force_safe_sw, cfg_hil_enable},
-                            wdata_hold, wstrb_hold)[0];
-                        cfg_force_safe_sw <= apply_wstrb(
-                            {27'd0, cfg_abz_direction_forward, cfg_abz_enable,
-                             1'b0, cfg_force_safe_sw, cfg_hil_enable},
-                            wdata_hold, wstrb_hold)[1];
+                        cfg_hil_enable <= control_write_merged[0];
+                        cfg_force_safe_sw <= control_write_merged[1];
                         if (wstrb_hold[0] && wdata_hold[2])
                             clear_faults_pulse <= 1'b1;
-                        cfg_abz_enable <= apply_wstrb(
-                            {27'd0, cfg_abz_direction_forward, cfg_abz_enable,
-                             1'b0, cfg_force_safe_sw, cfg_hil_enable},
-                            wdata_hold, wstrb_hold)[3];
-                        cfg_abz_direction_forward <= apply_wstrb(
-                            {27'd0, cfg_abz_direction_forward, cfg_abz_enable,
-                             1'b0, cfg_force_safe_sw, cfg_hil_enable},
-                            wdata_hold, wstrb_hold)[4];
+                        cfg_abz_enable <= control_write_merged[3];
+                        cfg_abz_direction_forward <= control_write_merged[4];
                     end
                     REG_MIN_DEADTIME:
                         cfg_min_deadtime_ticks <=
@@ -259,17 +267,11 @@ module hil_axi_control_plane #(
                         event_stage_timestamp[63:32] <=
                             apply_wstrb(event_stage_timestamp[63:32], wdata_hold, wstrb_hold);
                     REG_EVT_MASK:
-                        event_stage_mask <=
-                            apply_wstrb({{(32-DIO_WIDTH){1'b0}}, event_stage_mask},
-                                        wdata_hold, wstrb_hold)[DIO_WIDTH-1:0];
+                        event_stage_mask <= event_mask_write_merged[DIO_WIDTH-1:0];
                     REG_EVT_VALUE:
-                        event_stage_value <=
-                            apply_wstrb({{(32-DIO_WIDTH){1'b0}}, event_stage_value},
-                                        wdata_hold, wstrb_hold)[DIO_WIDTH-1:0];
+                        event_stage_value <= event_value_write_merged[DIO_WIDTH-1:0];
                     REG_EVT_ID:
-                        event_stage_id <=
-                            apply_wstrb({{(32-EVENT_ID_WIDTH){1'b0}}, event_stage_id},
-                                        wdata_hold, wstrb_hold)[EVENT_ID_WIDTH-1:0];
+                        event_stage_id <= event_id_write_merged[EVENT_ID_WIDTH-1:0];
                     REG_EVT_PUSH:
                         if (wstrb_hold[0] && wdata_hold[0])
                             event_push_pulse <= 1'b1;
@@ -332,7 +334,7 @@ module hil_axi_control_plane #(
                     REG_ABZ_STEP:     s_axi_rdata <= cfg_abz_step_period_ticks;
                     REG_BUILD_ID:     s_axi_rdata <= BUILD_ID;
                     REG_STATUS:
-                        s_axi_rdata <= {22'd0, fifo_order_error_latched,
+                        s_axi_rdata <= {20'd0, fifo_order_error_latched,
                                        fifo_overflow_latched, 1'b0,
                                        dio_event_armed, pwm_fault_flags,
                                        cfg_force_safe, cfg_hil_enable};
