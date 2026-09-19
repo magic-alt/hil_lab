@@ -64,6 +64,10 @@ def main() -> int:
         (r"event_count \+= 1u;", "local event counter"),
         (r"continue;", "immediate return to sampling"),
         (r"HIL_RAW_STOP_EVENT_LIMIT", "bounded auto-stop"),
+        (r"start_pending", "post-RPMsg start arm state"),
+        (r"baseline_raw = __R31 & R31_PWM_INPUT_MASK", "fresh post-RPMsg R31 baseline"),
+        (r"baseline_ticks = tick_now\(\)", "fresh post-RPMsg IEP baseline"),
+        (r"g_raw_shared\.running = 1u;", "publish running after fresh baseline"),
         (r"HIL_PRU_B1_RAW_CAPABILITIES", "raw capability handshake"),
         (r"HIL_PRU_B1_RAW_FIRMWARE_VERSION", "raw firmware version"),
     ]:
@@ -74,6 +78,12 @@ def main() -> int:
     forbid(main_c, r"record_deadtime", "dead-time analysis in raw hot path", errors)
     forbid(main_c, r"for \(channel_", "per-channel loop in raw hot path", errors)
     forbid(main_c, r"for \(pair_", "per-pair loop in raw hot path", errors)
+    forbid(
+        main_c,
+        r"case HIL_PRU_MSG_RAW_START:[\s\S]{0,1200}g_raw_shared\.running = 1u;",
+        "entering precise capture inside RAW_START RPMsg handler",
+        errors,
+    )
 
     require(linker, r"\.shared_raw\s+>\s+PRU_SHAREDMEM,\s+PAGE 2", "raw shared RAM section", errors)
     require(makefile, r"-O3", "PRU raw optimized build", errors)
