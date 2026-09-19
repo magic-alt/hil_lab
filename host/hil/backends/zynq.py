@@ -118,12 +118,35 @@ class _ZynqTransportBackend(HilBackend):
 
 
 class Axu2cgbBackend(_ZynqTransportBackend):
+    @classmethod
+    def open_uio(cls, device: str = "/dev/uio0", *, hardware_revision: str = "AXU2CGB"):
+        from ..transports import ZynqUioTransport
+        return cls(
+            ZynqUioTransport.open(
+                device,
+                expected_backend_type="zu2cg_axu2cgb",
+                hardware_revision=hardware_revision,
+            )
+        )
+
+
     expected_backend_types = frozenset(
         {"zynq_axu2cgb", "zu2cg_axu2cgb"}
     )
 
 
 class Ax7010Backend(_ZynqTransportBackend):
+    @classmethod
+    def open_uio(cls, device: str = "/dev/uio0", *, hardware_revision: str = "AX7010"):
+        from ..transports import ZynqUioTransport
+        return cls(
+            ZynqUioTransport.open(
+                device,
+                expected_backend_type="zynq7010_ax7010",
+                hardware_revision=hardware_revision,
+            )
+        )
+
     expected_backend_types = frozenset(
         {"zynq7010_ax7010", "zynq_ax7010"}
     )

@@ -292,6 +292,8 @@ Required before calling C4 closed-loop:
 **Goal:** use Cortex-A9/Linux as the control plane while PL remains the real-time
 data plane.
 
+Software/RTL baseline now includes a frozen AXI4-Lite register map, timestamped PL event FIFO, UIO mmap transport and real common-backend wiring. Physical Vivado PS integration/timing/UIO qualification remains board evidence.
+
 Scope:
 
 - AXI-Lite configuration/status registers;

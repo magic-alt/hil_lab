@@ -115,3 +115,10 @@ It maps only capabilities with a real current wire/data path:
 `Axu2cgbBackend` and `Ax7010Backend` are hardware-specific semantic adapters around a required PS/AXI/UIO transport. The transport must return a negotiated `BackendIdentity` from the actual hardware/bitstream.
 
 There is intentionally no hardwareless factory, Linux-GPIO implementation or assumed register map. Until G0/C5 freezes the real transport/register ABI, missing transport operations are reported as `InfrastructureError`.
+
+
+## Zynq AXI ABI v1
+
+The Zynq semantic backends now have a concrete UIO transport. The PL register map is versioned independently from Python code and begins with magic/ABI/backend/capability registers. Reset is fail-safe. DIO scheduling is backed by a timestamp-ordered PL FIFO rather than Linux sleeps.
+
+See `docs/zynq-axi-control-plane.md`.

@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+from host.hil import Capability
+
+MAGIC = 0x48494C32
+ABI_VERSION = 0x00010000
+MAP_SIZE = 0x1000
+
+REG_MAGIC = 0x000
+REG_ABI_VERSION = 0x004
+REG_BACKEND_ID = 0x008
+REG_CAPABILITIES = 0x00C
+REG_TICK_HZ = 0x010
+REG_COUNTER_BITS = 0x014
+REG_TIMESTAMP_LO = 0x018
+REG_TIMESTAMP_HI = 0x01C
+REG_CONTROL = 0x020
+REG_MIN_DEADTIME = 0x024
+REG_ABZ_STEP = 0x028
+REG_BUILD_ID = 0x02C
+REG_STATUS = 0x030
+REG_PWM_SEQ = 0x034
+REG_ENCODER_POS = 0x038
+
+REG_PWM_BASE = 0x040
+PWM_STRIDE = 0x10
+REG_PWM_VALID = 0x06C
+REG_PWM_FAULTS = 0x070
+
+REG_EVT_TS_LO = 0x100
+REG_EVT_TS_HI = 0x104
+REG_EVT_MASK = 0x108
+REG_EVT_VALUE = 0x10C
+REG_EVT_ID = 0x110
+REG_EVT_PUSH = 0x114
+REG_EVT_STATUS = 0x118
+
+CTRL_HIL_ENABLE = 1 << 0
+CTRL_FORCE_SAFE = 1 << 1
+CTRL_CLEAR_FAULTS = 1 << 2
+CTRL_ABZ_ENABLE = 1 << 3
+CTRL_ABZ_DIRECTION_FORWARD = 1 << 4
+
+EVT_STATUS_EMPTY = 1 << 0
+EVT_STATUS_FULL = 1 << 1
+EVT_STATUS_OVERFLOW = 1 << 2
+EVT_STATUS_ORDER_ERROR = 1 << 3
+
+BACKEND_ID_AX7010 = 0x00007010
+BACKEND_ID_AXU2CGB = 0x0002C600
+
+BACKEND_TYPES = {
+    BACKEND_ID_AX7010: "zynq7010_ax7010",
+    BACKEND_ID_AXU2CGB: "zu2cg_axu2cgb",
+}
+
+CAPABILITY_BITS = {
+    Capability.TIMEBASE: 0,
+    Capability.FORCE_SAFE: 1,
+    Capability.PWM_CAPTURE: 2,
+    Capability.PWM_GENERATOR: 3,
+    Capability.PWM_COMPLEMENTARY_MONITOR: 4,
+    Capability.ABZ_GENERATOR: 5,
+    Capability.ABZ_CAPTURE: 6,
+    Capability.SSI_SENSOR_EMULATOR: 7,
+    Capability.SSI_SENSOR_CAPTURE: 8,
+    Capability.BISS_SENSOR_EMULATOR: 9,
+    Capability.SPI_SENSOR_EMULATOR: 10,
+    Capability.DIO_SCHEDULER: 11,
+    Capability.FAULT_INJECTION: 12,
+    Capability.DAC_FEEDBACK: 13,
+    Capability.PMSM_PLANT_LITE: 14,
+    Capability.PMSM_PLANT: 15,
+    Capability.DUAL_INERTIA_PLANT: 16,
+}
+
+
+def decode_capabilities(bits: int) -> frozenset[Capability]:
+    return frozenset(
+        capability
+        for capability, bit in CAPABILITY_BITS.items()
+        if bits & (1 << bit)
+    )
