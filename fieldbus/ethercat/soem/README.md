@@ -1,3 +1,7 @@
 # SOEM
 
-Track D1 (#48): lightweight EtherCAT discovery/diagnostic and focused regression utilities. Keep DUT-test semantics above the library-specific adapter.
+Track D1 (#48) uses SOEM for lightweight EtherCAT discovery/diagnostics and focused regression utilities.
+
+Controller v1 provides a configurable `SoemSlaveInfo` wrapper around the SOEM `slaveinfo` example. The path is configurable because SOEM installations do not provide one universal executable location/name.
+
+Cyclic servo control remains a later physical qualification item; this adapter does not claim real-time master performance.
