@@ -5,9 +5,8 @@
 
 extern uint32_t SystemCoreClock;
 
-#define CLOCK_SOURCE_HSE_PLL    (1UL)
-#define CLOCK_SOURCE_HSI_PLL    (2UL)
-#define CLOCK_SOURCE_HSI_DIRECT (3UL)
+#define CLOCK_SOURCE_NONE          (0UL)
+#define CLOCK_SOURCE_HSE_XTAL_PLL  (1UL)
 
 #define CLOCK_FAULT_HSI_TIMEOUT    (1UL << 0)
 #define CLOCK_FAULT_HSE_TIMEOUT    (1UL << 1)
@@ -19,7 +18,111 @@ extern uint32_t SystemCoreClock;
 #define CLOCK_WAIT_LOOPS (1000000UL)
 
 static void status_gpio_init(void);
-static uint32_t clock_init(void);
+static uint32_t clock_init(void)
+{
+    g_clock_fault_flags = 0UL;
+    g_clock_source = CLOCK_SOURCE_NONE;
+    g_sysclk_hz = HIL_HSI_HZ;
+
+    /*
+     * Reset starts from HSI. Keep it enabled only as the boot clock while the
+     * MB1075-F429I-E01 board's X3 8 MHz crystal is qualified.
+     */
+    RCC_CR |= RCC_CR_HSION;
+    if (wait_rcc_cr_set(RCC_CR_HSIRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_HSI_TIMEOUT;
+        fail_stop();
+    }
+
+    RCC_APB1ENR |= RCC_APB1ENR_PWREN;
+    (void)RCC_APB1ENR;
+
+    PWR_CR = (PWR_CR & ~(3UL << 14)) | PWR_CR_VOS_SCALE1;
+
+    FLASH_ACR =
+        FLASH_ACR_LATENCY_5WS |
+        FLASH_ACR_PRFTEN |
+        FLASH_ACR_ICEN |
+        FLASH_ACR_DCEN;
+
+    /*
+     * Timing qualification reference:
+     * MB1075-F429I-E01 uses the onboard X3 8 MHz crystal on PH0/PH1.
+     * HSEBYP must be 0 for crystal/ceramic-resonator mode. A missing HSE is a
+     * hard failure: silently falling back to HSI would invalidate PWM period
+     * and dead-time measurements.
+     */
+    RCC_CR &= ~RCC_CR_HSEON;
+    if (wait_rcc_cr_clear(RCC_CR_HSERDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_HSE_TIMEOUT;
+        fail_stop();
+    }
+
+    RCC_CR &= ~RCC_CR_HSEBYP;
+    RCC_CR |= RCC_CR_HSEON;
+    if (wait_rcc_cr_set(RCC_CR_HSERDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_HSE_TIMEOUT;
+        fail_stop();
+    }
+
+    RCC_CR &= ~RCC_CR_PLLON;
+    if (wait_rcc_cr_clear(RCC_CR_PLLRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_PLL_TIMEOUT;
+        fail_stop();
+    }
+
+    RCC_PLLCFGR =
+        (8UL << 0) |
+        (360UL << 6) |
+        (0UL << 16) |
+        RCC_PLLCFGR_PLLSRC_HSE |
+        (7UL << 24);
+
+    RCC_CR |= RCC_CR_PLLON;
+    if (wait_rcc_cr_set(RCC_CR_PLLRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_PLL_TIMEOUT;
+        fail_stop();
+    }
+
+    PWR_CR |= PWR_CR_ODEN;
+    if (wait_pwr_csr_set(PWR_CSR_ODRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_OD_TIMEOUT;
+        fail_stop();
+    }
+
+    PWR_CR |= PWR_CR_ODSWEN;
+    if (wait_pwr_csr_set(PWR_CSR_ODSWRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_ODSW_TIMEOUT;
+        fail_stop();
+    }
+
+    RCC_CFGR =
+        (RCC_CFGR &
+         ~(RCC_CFGR_SW_MASK |
+           RCC_CFGR_HPRE_MASK |
+           RCC_CFGR_PPRE1_MASK |
+           RCC_CFGR_PPRE2_MASK)) |
+        RCC_CFGR_PPRE1_DIV4 |
+        RCC_CFGR_PPRE2_DIV2 |
+        RCC_CFGR_SW_PLL;
+
+    if (wait_sysclk_pll() == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_SWITCH_TIMEOUT;
+        fail_stop();
+    }
+
+    SystemCoreClock = HIL_PLL_SYSCLK_HZ;
+    g_sysclk_hz = HIL_PLL_SYSCLK_HZ;
+    g_clock_source = CLOCK_SOURCE_HSE_XTAL_PLL;
+
+    /*
+     * APB2 is SYSCLK/2, and STM32F4 timer clocks double APB clocks when the
+     * APB prescaler is greater than 1. TIM8 is therefore exactly referenced
+     * to the 180 MHz HSE-derived PLL clock tree.
+     */
+    return HIL_PLL_SYSCLK_HZ;
+}
+
 static void pwm_gpio_init(void);
 static void tim8_pwm_init(uint32_t timer_clock_hz);
 static uint32_t deadtime_ns_to_dtg(uint32_t deadtime_ns, uint32_t timer_hz);
@@ -58,6 +161,16 @@ static uint32_t wait_rcc_cr_set(uint32_t mask)
     return ((RCC_CR & mask) != 0UL) ? 1UL : 0UL;
 }
 
+static uint32_t wait_rcc_cr_clear(uint32_t mask)
+{
+    uint32_t timeout = CLOCK_WAIT_LOOPS;
+
+    while (((RCC_CR & mask) != 0UL) && (timeout-- != 0UL)) {
+    }
+
+    return ((RCC_CR & mask) == 0UL) ? 1UL : 0UL;
+}
+
 static uint32_t wait_pwr_csr_set(uint32_t mask)
 {
     uint32_t timeout = CLOCK_WAIT_LOOPS;
@@ -77,17 +190,6 @@ static uint32_t wait_sysclk_pll(void)
     }
 
     return ((RCC_CFGR & RCC_CFGR_SWS_MASK) == RCC_CFGR_SWS_PLL) ? 1UL : 0UL;
-}
-
-static uint32_t wait_sysclk_hsi(void)
-{
-    uint32_t timeout = CLOCK_WAIT_LOOPS;
-
-    while (((RCC_CFGR & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_HSI) &&
-           (timeout-- != 0UL)) {
-    }
-
-    return ((RCC_CFGR & RCC_CFGR_SWS_MASK) == RCC_CFGR_SWS_HSI) ? 1UL : 0UL;
 }
 
 /*
@@ -171,12 +273,12 @@ int main(void)
     tim8_pwm_init(g_tim8_clock_hz);
     g_boot_stage = 5UL;
 
-    /* Green = PWM active. Red remains on only when external HSE-MCO was lost. */
+    /* Green = qualified X3/HSE PWM active; red stays off only on that path. */
     GPIO_ODR(GPIOG_BASE) |= (1UL << 13);
-    if (g_clock_source == CLOCK_SOURCE_HSE_PLL) {
+    if (g_clock_source == CLOCK_SOURCE_HSE_XTAL_PLL) {
         GPIO_ODR(GPIOG_BASE) &= ~(1UL << 14);
     } else {
-        GPIO_ODR(GPIOG_BASE) |= (1UL << 14);
+        fail_stop();
     }
 
     for (;;) {
