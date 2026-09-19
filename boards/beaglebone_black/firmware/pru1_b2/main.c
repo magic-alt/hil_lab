@@ -23,19 +23,26 @@ volatile register uint32_t __R31;
 #define IEP_TICK_HZ                 (200000000u)
 #define IEP_COUNTER_BITS            (32u)
 
-/*
- * First B2.1 ABZ pin map:
- *   A -> P8_45 -> PRU1 R30[0]
- *   B -> P8_46 -> PRU1 R30[1]
- *   Z -> P8_43 -> PRU1 R30[2]
- */
+#define STIM_MODE_NONE              (0u)
+#define STIM_MODE_ABZ               (1u)
+#define STIM_MODE_HALL              (2u)
+
+#define STIM_STATE_IDLE             (0u)
+#define STIM_STATE_RUNNING          (1u)
+#define STIM_STATE_ARMED            (2u)
+
 #define ABZ_A_MASK                  (1u << 0)
 #define ABZ_B_MASK                  (1u << 1)
 #define ABZ_Z_MASK                  (1u << 2)
-#define ABZ_OUTPUT_MASK             (ABZ_A_MASK | ABZ_B_MASK | ABZ_Z_MASK)
+#define STIM_OUTPUT_MASK            (ABZ_A_MASK | ABZ_B_MASK | ABZ_Z_MASK)
 
 #define ABZ_MIN_TRANSITION_TICKS    (100u)
 #define ABZ_DEFAULT_TRANSITION_TICKS (200000u)
+#define HALL_MIN_TRANSITION_TICKS   (100u)
+#define HALL_DEFAULT_TRANSITION_TICKS (200000u)
+
+#define ABZ_SCHED_TRANSITION_VALID  (1u << 0)
+#define ABZ_SCHED_DIRECTION_VALID   (1u << 1)
 
 union hil_rx_buffer {
     struct hil_pru_msg msg;
@@ -51,12 +58,19 @@ static uint32_t tick_now(void)
     return CT_IEP.TMR_CNT;
 }
 
+static uint32_t time_due(uint32_t now, uint32_t deadline)
+{
+    return ((int32_t)(now - deadline) >= 0) ? 1u : 0u;
+}
+
+static uint32_t time_is_future(uint32_t now, uint32_t deadline)
+{
+    int32_t delta = (int32_t)(deadline - now);
+    return (delta > 0) ? 1u : 0u;
+}
+
 static void init_timebase_if_needed(void)
 {
-    /*
-     * B2 shares the PRU-ICSS IEP timebase with B1. PRU1 must not reset an
-     * already-running counter because that would corrupt PRU0 capture time.
-     */
     if (CT_IEP.TMR_GLB_CFG_bit.CNT_EN == 0u) {
         CT_IEP.TMR_CNT = 0u;
         CT_IEP.TMR_GLB_STS_bit.CNT_OVF = 1u;
@@ -80,13 +94,6 @@ static void clear_response(uint16_t request_type, uint32_t seq)
 
 static uint32_t phase_to_ab(uint32_t phase)
 {
-    /*
-     * Forward Gray-code sequence, A leads B:
-     *   phase 0: 00
-     *   phase 1: 10
-     *   phase 2: 11
-     *   phase 3: 01
-     */
     switch (phase & 3u) {
     case 1u:
         return ABZ_A_MASK;
@@ -99,22 +106,48 @@ static uint32_t phase_to_ab(uint32_t phase)
     }
 }
 
-static void apply_abz(uint32_t phase, uint32_t index_active)
+static uint32_t hall_step_to_bits(uint32_t step)
+{
+    /*
+     * Forward six-step Hall sequence on U/V/W = R30[0:2]:
+     *   001 -> 101 -> 100 -> 110 -> 010 -> 011 -> 001
+     * Reverse walks the same table in the opposite direction.
+     */
+    switch (step % 6u) {
+    case 0u:
+        return 0x1u;
+    case 1u:
+        return 0x5u;
+    case 2u:
+        return 0x4u;
+    case 3u:
+        return 0x6u;
+    case 4u:
+        return 0x2u;
+    default:
+        return 0x3u;
+    }
+}
+
+static void apply_outputs(uint32_t bits)
 {
     uint32_t outputs = __R30;
-    uint32_t abz = phase_to_ab(phase);
-
-    if (index_active != 0u)
-        abz |= ABZ_Z_MASK;
-
-    outputs &= ~ABZ_OUTPUT_MASK;
-    outputs |= abz;
+    outputs &= ~STIM_OUTPUT_MASK;
+    outputs |= (bits & STIM_OUTPUT_MASK);
     __R30 = outputs;
+}
+
+static void apply_abz(uint32_t phase, uint32_t index_active)
+{
+    uint32_t bits = phase_to_ab(phase);
+    if (index_active != 0u)
+        bits |= ABZ_Z_MASK;
+    apply_outputs(bits);
 }
 
 static void force_safe_outputs(void)
 {
-    __R30 &= ~ABZ_OUTPUT_MASK;
+    __R30 &= ~STIM_OUTPUT_MASK;
 }
 
 static uint32_t index_is_active(
@@ -129,7 +162,13 @@ static uint32_t index_is_active(
 
 static void handle_request(
     uint16_t len,
+    uint32_t *active_mode,
     uint32_t *running,
+    uint32_t *start_pending_mode,
+    uint32_t *armed_mode,
+    uint32_t *armed_apply_ticks,
+    uint32_t *last_apply_ticks,
+    uint32_t *schedule_late_count,
     uint32_t *transition_ticks,
     uint32_t *index_period_transitions,
     uint32_t *index_width_transitions,
@@ -140,7 +179,18 @@ static void handle_request(
     uint32_t *index_phase,
     uint32_t *next_transition_ticks,
     uint32_t *late_transition_count,
-    uint32_t *last_apply_ticks)
+    uint32_t *update_pending,
+    uint32_t *update_apply_ticks,
+    uint32_t *update_transition_ticks,
+    uint32_t *update_direction,
+    uint32_t *update_flags,
+    uint32_t *hall_transition_ticks,
+    uint32_t *hall_initial_step,
+    uint32_t *hall_step,
+    uint32_t *hall_direction,
+    uint32_t *hall_transition_count,
+    uint32_t *hall_next_transition_ticks,
+    uint32_t *hall_late_transition_count)
 {
     struct hil_pru_msg *request = &rx_buffer.msg;
     uint32_t now = tick_now();
@@ -182,17 +232,23 @@ static void handle_request(
 
     case HIL_PRU_MSG_FORCE_SAFE:
         *running = 0u;
+        *active_mode = STIM_MODE_NONE;
+        *start_pending_mode = STIM_MODE_NONE;
+        *armed_mode = STIM_MODE_NONE;
+        *update_pending = 0u;
         force_safe_outputs();
         *last_apply_ticks = now;
         tx_msg.arg0 = now;
         tx_msg.arg1 = *transition_count;
+        tx_msg.arg2 = *hall_transition_count;
         break;
 
     case HIL_PRU_MSG_ABZ_CONFIG: {
         uint32_t requested_direction = request->arg3 & 1u;
         uint32_t requested_phase = (request->arg3 >> 8) & 3u;
 
-        if (*running != 0u) {
+        if ((*running != 0u) || (*armed_mode != STIM_MODE_NONE) ||
+            (*start_pending_mode != STIM_MODE_NONE)) {
             tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
             break;
         }
@@ -216,6 +272,8 @@ static void handle_request(
         *transition_count = 0u;
         *index_phase = 0u;
         *late_transition_count = 0u;
+        *schedule_late_count = 0u;
+        *update_pending = 0u;
         force_safe_outputs();
 
         tx_msg.arg0 = *transition_ticks;
@@ -225,45 +283,97 @@ static void handle_request(
         break;
     }
 
-    case HIL_PRU_MSG_ABZ_START: {
-        uint32_t z_active;
+    case HIL_PRU_MSG_ABZ_START:
+        if ((*running != 0u) || (*armed_mode != STIM_MODE_NONE) ||
+            (*start_pending_mode != STIM_MODE_NONE)) {
+            tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
+            break;
+        }
+        *start_pending_mode = STIM_MODE_ABZ;
+        tx_msg.arg0 = now; /* arm-request timestamp; apply occurs after ACK */
+        tx_msg.arg1 = phase_to_ab(*initial_phase) |
+            (index_is_active(
+                *index_period_transitions,
+                *index_width_transitions,
+                0u) ? ABZ_Z_MASK : 0u);
+        tx_msg.arg2 = *transition_ticks;
+        tx_msg.arg3 = *direction;
+        break;
 
+    case HIL_PRU_MSG_ABZ_ARM:
+        if ((*running != 0u) || (*armed_mode != STIM_MODE_NONE) ||
+            (*start_pending_mode != STIM_MODE_NONE)) {
+            tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
+            break;
+        }
+        if ((request->arg0 == 0u) || !time_is_future(now, request->arg0)) {
+            tx_msg.flags = HIL_PRU_ERR_INVALID_ARGUMENT;
+            break;
+        }
+        *armed_mode = STIM_MODE_ABZ;
+        *armed_apply_ticks = request->arg0;
+        tx_msg.arg0 = now;
+        tx_msg.arg1 = *armed_apply_ticks;
+        tx_msg.arg2 = *transition_ticks;
+        tx_msg.arg3 = *direction;
+        break;
+
+    case HIL_PRU_MSG_ABZ_SCHEDULE:
         if (*running != 0u) {
             tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
             break;
         }
+        if (*armed_mode != STIM_MODE_ABZ) {
+            tx_msg.flags = HIL_PRU_ERR_NOT_ARMED;
+            break;
+        }
+        if (*update_pending != 0u) {
+            tx_msg.flags = HIL_PRU_ERR_SCHEDULE_BUSY;
+            break;
+        }
+        if ((request->arg0 == 0u) || !time_is_future(now, request->arg0) ||
+            !time_is_future(*armed_apply_ticks, request->arg0)) {
+            tx_msg.flags = HIL_PRU_ERR_INVALID_ARGUMENT;
+            break;
+        }
+        if ((request->arg3 & ABZ_SCHED_TRANSITION_VALID) != 0u) {
+            if ((request->arg1 < ABZ_MIN_TRANSITION_TICKS) ||
+                (request->arg1 >= 0x80000000u)) {
+                tx_msg.flags = HIL_PRU_ERR_INVALID_ARGUMENT;
+                break;
+            }
+        }
+        if (((request->arg3 & ABZ_SCHED_DIRECTION_VALID) != 0u) &&
+            (request->arg2 > 1u)) {
+            tx_msg.flags = HIL_PRU_ERR_INVALID_ARGUMENT;
+            break;
+        }
 
-        *phase = *initial_phase;
-        *transition_count = 0u;
-        *index_phase = 0u;
-        *late_transition_count = 0u;
-
-        z_active = index_is_active(
-            *index_period_transitions,
-            *index_width_transitions,
-            *index_phase);
-
-        apply_abz(*phase, z_active);
-
-        *last_apply_ticks = now;
-        *next_transition_ticks = now + *transition_ticks;
-        *running = 1u;
+        *update_apply_ticks = request->arg0;
+        *update_transition_ticks = request->arg1;
+        *update_direction = request->arg2;
+        *update_flags = request->arg3 &
+            (ABZ_SCHED_TRANSITION_VALID | ABZ_SCHED_DIRECTION_VALID);
+        *update_pending = 1u;
 
         tx_msg.arg0 = now;
-        tx_msg.arg1 = phase_to_ab(*phase) |
-                      (z_active ? ABZ_Z_MASK : 0u);
-        tx_msg.arg2 = *next_transition_ticks;
-        tx_msg.arg3 = *direction;
+        tx_msg.arg1 = *update_apply_ticks;
+        tx_msg.arg2 = *update_transition_ticks;
+        tx_msg.arg3 = *update_flags | ((*update_direction & 1u) << 8);
         break;
-    }
 
     case HIL_PRU_MSG_ABZ_STOP:
         *running = 0u;
+        *active_mode = STIM_MODE_NONE;
+        *armed_mode = STIM_MODE_NONE;
+        *start_pending_mode = STIM_MODE_NONE;
+        *update_pending = 0u;
         force_safe_outputs();
         *last_apply_ticks = now;
         tx_msg.arg0 = now;
         tx_msg.arg1 = *transition_count;
         tx_msg.arg2 = *late_transition_count;
+        tx_msg.arg3 = *schedule_late_count;
         break;
 
     case HIL_PRU_MSG_ABZ_DIRECTION:
@@ -279,10 +389,76 @@ static void handle_request(
         break;
 
     case HIL_PRU_MSG_ABZ_STATUS:
-        tx_msg.arg0 = *running;
+        tx_msg.arg0 = (*running != 0u && *active_mode == STIM_MODE_ABZ) ? 1u :
+            ((*armed_mode == STIM_MODE_ABZ) ? 2u : 0u);
         tx_msg.arg1 = *transition_ticks;
         tx_msg.arg2 = *transition_count;
         tx_msg.arg3 = *late_transition_count;
+        break;
+
+    case HIL_PRU_MSG_HALL_CONFIG:
+        if ((*running != 0u) || (*armed_mode != STIM_MODE_NONE) ||
+            (*start_pending_mode != STIM_MODE_NONE)) {
+            tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
+            break;
+        }
+        if ((request->arg0 < HALL_MIN_TRANSITION_TICKS) ||
+            (request->arg0 >= 0x80000000u) ||
+            (request->arg1 > 1u) ||
+            (request->arg2 >= 6u)) {
+            tx_msg.flags = HIL_PRU_ERR_INVALID_ARGUMENT;
+            break;
+        }
+        *hall_transition_ticks = request->arg0;
+        *hall_direction = request->arg1;
+        *hall_initial_step = request->arg2;
+        *hall_step = request->arg2;
+        *hall_transition_count = 0u;
+        *hall_late_transition_count = 0u;
+        force_safe_outputs();
+        tx_msg.arg0 = *hall_transition_ticks;
+        tx_msg.arg1 = *hall_direction;
+        tx_msg.arg2 = *hall_initial_step;
+        tx_msg.arg3 = hall_step_to_bits(*hall_initial_step);
+        break;
+
+    case HIL_PRU_MSG_HALL_START:
+        if ((*running != 0u) || (*armed_mode != STIM_MODE_NONE) ||
+            (*start_pending_mode != STIM_MODE_NONE)) {
+            tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
+            break;
+        }
+        *start_pending_mode = STIM_MODE_HALL;
+        tx_msg.arg0 = now;
+        tx_msg.arg1 = hall_step_to_bits(*hall_initial_step);
+        tx_msg.arg2 = *hall_transition_ticks;
+        tx_msg.arg3 = *hall_direction;
+        break;
+
+    case HIL_PRU_MSG_HALL_STOP:
+        *running = 0u;
+        *active_mode = STIM_MODE_NONE;
+        *start_pending_mode = STIM_MODE_NONE;
+        force_safe_outputs();
+        *last_apply_ticks = now;
+        tx_msg.arg0 = now;
+        tx_msg.arg1 = *hall_transition_count;
+        tx_msg.arg2 = *hall_late_transition_count;
+        break;
+
+    case HIL_PRU_MSG_HALL_STATUS:
+        tx_msg.arg0 = (*running != 0u && *active_mode == STIM_MODE_HALL) ? 1u : 0u;
+        tx_msg.arg1 = *hall_transition_ticks;
+        tx_msg.arg2 = *hall_transition_count;
+        tx_msg.arg3 = *hall_late_transition_count;
+        break;
+
+    case HIL_PRU_MSG_STIM_STATUS:
+        tx_msg.arg0 = (*running != 0u) ? STIM_STATE_RUNNING :
+            ((*armed_mode != STIM_MODE_NONE) ? STIM_STATE_ARMED : STIM_STATE_IDLE);
+        tx_msg.arg1 = (*running != 0u) ? *active_mode : *armed_mode;
+        tx_msg.arg2 = *last_apply_ticks;
+        tx_msg.arg3 = *schedule_late_count;
         break;
 
     default:
@@ -298,7 +474,14 @@ void main(void)
     uint16_t len = 0u;
     volatile uint8_t *driver_status;
 
+    uint32_t active_mode = STIM_MODE_NONE;
     uint32_t running = 0u;
+    uint32_t start_pending_mode = STIM_MODE_NONE;
+    uint32_t armed_mode = STIM_MODE_NONE;
+    uint32_t armed_apply_ticks = 0u;
+    uint32_t last_apply_ticks = 0u;
+    uint32_t schedule_late_count = 0u;
+
     uint32_t transition_ticks = ABZ_DEFAULT_TRANSITION_TICKS;
     uint32_t index_period_transitions = 0u;
     uint32_t index_width_transitions = 0u;
@@ -309,11 +492,22 @@ void main(void)
     uint32_t index_phase = 0u;
     uint32_t next_transition_ticks = 0u;
     uint32_t late_transition_count = 0u;
-    uint32_t last_apply_ticks = 0u;
+
+    uint32_t update_pending = 0u;
+    uint32_t update_apply_ticks = 0u;
+    uint32_t update_transition_ticks = 0u;
+    uint32_t update_direction = 0u;
+    uint32_t update_flags = 0u;
+
+    uint32_t hall_transition_ticks = HALL_DEFAULT_TRANSITION_TICKS;
+    uint32_t hall_initial_step = 0u;
+    uint32_t hall_step = 0u;
+    uint32_t hall_direction = 0u;
+    uint32_t hall_transition_count = 0u;
+    uint32_t hall_next_transition_ticks = 0u;
+    uint32_t hall_late_transition_count = 0u;
 
     CT_CFG.SYSCFG_bit.STANDBY_INIT = 0u;
-
-    /* PRU1 GPI/GPO Mode 0: direct R30/R31. */
     CT_CFG.GPCFG1 = 0u;
 
     init_timebase_if_needed();
@@ -347,8 +541,51 @@ void main(void)
     while (1) {
         uint32_t now = tick_now();
 
-        if (running != 0u) {
-            if ((int32_t)(now - next_transition_ticks) >= 0) {
+        if ((armed_mode == STIM_MODE_ABZ) && time_due(now, armed_apply_ticks)) {
+            uint32_t z_active;
+            uint32_t lateness = now - armed_apply_ticks;
+
+            phase = initial_phase;
+            transition_count = 0u;
+            index_phase = 0u;
+            late_transition_count = 0u;
+            z_active = index_is_active(
+                index_period_transitions,
+                index_width_transitions,
+                index_phase);
+            apply_abz(phase, z_active);
+
+            if (lateness >= transition_ticks)
+                schedule_late_count += 1u;
+
+            last_apply_ticks = now;
+            next_transition_ticks = now + transition_ticks;
+            active_mode = STIM_MODE_ABZ;
+            running = 1u;
+            armed_mode = STIM_MODE_NONE;
+            continue;
+        }
+
+        if ((running != 0u) && (active_mode == STIM_MODE_ABZ)) {
+            if ((update_pending != 0u) &&
+                time_due(now, update_apply_ticks)) {
+                uint32_t lateness = now - update_apply_ticks;
+
+                if ((update_flags & ABZ_SCHED_TRANSITION_VALID) != 0u)
+                    transition_ticks = update_transition_ticks;
+                if ((update_flags & ABZ_SCHED_DIRECTION_VALID) != 0u)
+                    direction = update_direction;
+
+                if (lateness >= transition_ticks)
+                    schedule_late_count += 1u;
+
+                last_apply_ticks = now;
+                next_transition_ticks = now + transition_ticks;
+                update_pending = 0u;
+                continue;
+            }
+
+            if (time_due(now, next_transition_ticks)) {
                 uint32_t lateness = now - next_transition_ticks;
                 uint32_t z_active;
 
@@ -374,20 +611,37 @@ void main(void)
                     index_period_transitions,
                     index_width_transitions,
                     index_phase);
-
                 apply_abz(phase, z_active);
                 last_apply_ticks = now;
 
-                /*
-                 * Keep phase lock for ordinary sub-period jitter. If a whole
-                 * transition period was missed (for example due to RPMsg),
-                 * count it and resynchronize instead of emitting a burst of
-                 * compressed catch-up transitions.
-                 */
                 if (lateness >= transition_ticks)
                     next_transition_ticks = now + transition_ticks;
                 else
                     next_transition_ticks += transition_ticks;
+                continue;
+            }
+        }
+
+        if ((running != 0u) && (active_mode == STIM_MODE_HALL)) {
+            if (time_due(now, hall_next_transition_ticks)) {
+                uint32_t lateness = now - hall_next_transition_ticks;
+
+                if (lateness >= hall_transition_ticks)
+                    hall_late_transition_count += 1u;
+
+                if (hall_direction == 0u)
+                    hall_step = (hall_step + 1u) % 6u;
+                else
+                    hall_step = (hall_step + 5u) % 6u;
+
+                hall_transition_count += 1u;
+                apply_outputs(hall_step_to_bits(hall_step));
+                last_apply_ticks = now;
+
+                if (lateness >= hall_transition_ticks)
+                    hall_next_transition_ticks = now + hall_transition_ticks;
+                else
+                    hall_next_transition_ticks += hall_transition_ticks;
                 continue;
             }
         }
@@ -402,7 +656,13 @@ void main(void)
                                      &len) == PRU_RPMSG_SUCCESS) {
                 handle_request(
                     len,
+                    &active_mode,
                     &running,
+                    &start_pending_mode,
+                    &armed_mode,
+                    &armed_apply_ticks,
+                    &last_apply_ticks,
+                    &schedule_late_count,
                     &transition_ticks,
                     &index_period_transitions,
                     &index_width_transitions,
@@ -413,13 +673,63 @@ void main(void)
                     &index_phase,
                     &next_transition_ticks,
                     &late_transition_count,
-                    &last_apply_ticks);
+                    &update_pending,
+                    &update_apply_ticks,
+                    &update_transition_ticks,
+                    &update_direction,
+                    &update_flags,
+                    &hall_transition_ticks,
+                    &hall_initial_step,
+                    &hall_step,
+                    &hall_direction,
+                    &hall_transition_count,
+                    &hall_next_transition_ticks,
+                    &hall_late_transition_count);
 
                 pru_rpmsg_send(&transport,
                                dst,
                                src,
                                (uint8_t *)&tx_msg,
                                (uint16_t)sizeof(tx_msg));
+
+                /*
+                 * ACK-before-run boundary: only after the START response has
+                 * been sent do we take a fresh IEP timestamp and establish
+                 * the first real-time deadline.
+                 */
+                if (start_pending_mode == STIM_MODE_ABZ) {
+                    uint32_t start_now = tick_now();
+                    uint32_t z_active;
+
+                    phase = initial_phase;
+                    transition_count = 0u;
+                    index_phase = 0u;
+                    late_transition_count = 0u;
+                    schedule_late_count = 0u;
+                    z_active = index_is_active(
+                        index_period_transitions,
+                        index_width_transitions,
+                        index_phase);
+                    apply_abz(phase, z_active);
+                    last_apply_ticks = start_now;
+                    next_transition_ticks = start_now + transition_ticks;
+                    active_mode = STIM_MODE_ABZ;
+                    running = 1u;
+                    start_pending_mode = STIM_MODE_NONE;
+                } else if (start_pending_mode == STIM_MODE_HALL) {
+                    uint32_t start_now = tick_now();
+
+                    hall_step = hall_initial_step;
+                    hall_transition_count = 0u;
+                    hall_late_transition_count = 0u;
+                    apply_outputs(hall_step_to_bits(hall_step));
+                    last_apply_ticks = start_now;
+                    hall_next_transition_ticks =
+                        start_now + hall_transition_ticks;
+                    active_mode = STIM_MODE_HALL;
+                    running = 1u;
+                    start_pending_mode = STIM_MODE_NONE;
+                }
             }
         }
     }
