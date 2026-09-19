@@ -117,25 +117,64 @@ def configure_pdo_mapping(
     sdo.download_u32(communication_index, 1, mapping.cob_id)
 
 
-CIA402_RPDO = PdoMapping(
+CIA402_RPDO_CSP = PdoMapping(
+    cob_id=0x200,
+    entries=(
+        PdoMappingEntry("controlword", 0x6040, 0, 16),
+        PdoMappingEntry("mode", 0x6060, 0, 8, signed=True),
+        PdoMappingEntry("target_position", 0x607A, 0, 32, signed=True),
+    ),
+)
+
+CIA402_RPDO_CSV = PdoMapping(
+    cob_id=0x200,
+    entries=(
+        PdoMappingEntry("controlword", 0x6040, 0, 16),
+        PdoMappingEntry("mode", 0x6060, 0, 8, signed=True),
+        PdoMappingEntry("target_velocity", 0x60FF, 0, 32, signed=True),
+    ),
+)
+
+CIA402_RPDO_CST = PdoMapping(
     cob_id=0x200,
     entries=(
         PdoMappingEntry("controlword", 0x6040, 0, 16),
         PdoMappingEntry("mode", 0x6060, 0, 8, signed=True),
         PdoMappingEntry("target_torque", 0x6071, 0, 16, signed=True),
-        PdoMappingEntry("target_velocity", 0x60FF, 0, 32, signed=True),
     ),
 )
 
-CIA402_TPDO = PdoMapping(
+CIA402_TPDO_CSP = PdoMapping(
+    cob_id=0x180,
+    entries=(
+        PdoMappingEntry("statusword", 0x6041, 0, 16),
+        PdoMappingEntry("mode_display", 0x6061, 0, 8, signed=True),
+        PdoMappingEntry("position_actual", 0x6064, 0, 32, signed=True),
+    ),
+)
+
+CIA402_TPDO_CSV = PdoMapping(
+    cob_id=0x180,
+    entries=(
+        PdoMappingEntry("statusword", 0x6041, 0, 16),
+        PdoMappingEntry("mode_display", 0x6061, 0, 8, signed=True),
+        PdoMappingEntry("velocity_actual", 0x606C, 0, 32, signed=True),
+    ),
+)
+
+CIA402_TPDO_CST = PdoMapping(
     cob_id=0x180,
     entries=(
         PdoMappingEntry("statusword", 0x6041, 0, 16),
         PdoMappingEntry("mode_display", 0x6061, 0, 8, signed=True),
         PdoMappingEntry("torque_actual", 0x6077, 0, 16, signed=True),
-        PdoMappingEntry("velocity_actual", 0x606C, 0, 32, signed=True),
     ),
 )
+
+# Backward-compatible compact default is CST because it leaves headroom while
+# carrying the essential control/status and cyclic torque values.
+CIA402_RPDO = CIA402_RPDO_CST
+CIA402_TPDO = CIA402_TPDO_CST
 
 
 def with_node_id(mapping: PdoMapping, node_id: int) -> PdoMapping:
