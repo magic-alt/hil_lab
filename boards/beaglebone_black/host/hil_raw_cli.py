@@ -126,8 +126,8 @@ def main() -> int:
             response = client.request(MSG_RAW_START)
             result = {
                 "status": response.flags,
-                "start_ticks": response.arg0,
-                "initial_raw_inputs": response.arg1,
+                "arm_request_ticks": response.arg0,
+                "prearm_raw_inputs": response.arg1,
                 "event_limit": response.arg2,
             }
 
@@ -178,8 +178,8 @@ def main() -> int:
             shared = read_frozen_raw_capture()
             result = {
                 "control": {
-                    "start_ticks": started.arg0,
-                    "initial_raw_inputs": started.arg1,
+                    "arm_request_ticks": started.arg0,
+                    "prearm_raw_inputs": started.arg1,
                     **state,
                 },
                 "analysis": analyze_raw_capture(
