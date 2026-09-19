@@ -136,6 +136,7 @@ static void handle_request(
     uint16_t len,
     uint32_t raw_inputs,
     uint32_t *capture_running,
+    uint32_t *start_pending,
     uint32_t *last_inputs,
     uint32_t *event_count,
     uint32_t *event_limit)
@@ -179,6 +180,7 @@ static void handle_request(
         break;
 
     case HIL_PRU_MSG_FORCE_SAFE:
+        *start_pending = 0u;
         if (*capture_running != 0u) {
             publish_stop(
                 HIL_RAW_STOP_FORCE_SAFE,
@@ -192,7 +194,7 @@ static void handle_request(
         break;
 
     case HIL_PRU_MSG_RAW_CONFIG:
-        if (*capture_running != 0u) {
+        if ((*capture_running != 0u) || (*start_pending != 0u)) {
             tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
             break;
         }
@@ -208,7 +210,7 @@ static void handle_request(
         break;
 
     case HIL_PRU_MSG_RAW_CLEAR:
-        if (*capture_running != 0u) {
+        if ((*capture_running != 0u) || (*start_pending != 0u)) {
             tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
             break;
         }
@@ -220,31 +222,40 @@ static void handle_request(
         break;
 
     case HIL_PRU_MSG_RAW_START:
-        if (*capture_running != 0u) {
+        if ((*capture_running != 0u) || (*start_pending != 0u)) {
             tx_msg.flags = HIL_PRU_ERR_CAPTURE_RUNNING;
             break;
         }
 
+        /*
+         * Do not enter the precise window inside RPMsg handling.
+         *
+         * raw_inputs was sampled before receiving/decoding/sending this
+         * command and can already be stale by several PWM transitions. The
+         * main loop arms capture only after the RAW_START response has been
+         * sent, then takes a fresh R31 + IEP baseline.
+         */
         *event_count = 0u;
-        *last_inputs = raw_inputs;
+        *start_pending = 1u;
 
         g_raw_shared.event_count = 0u;
-        g_raw_shared.initial_raw_inputs = raw_inputs;
-        g_raw_shared.final_raw_inputs = raw_inputs;
-        g_raw_shared.start_ticks = now;
         g_raw_shared.stop_ticks = 0u;
         g_raw_shared.stop_reason = HIL_RAW_STOP_NONE;
         g_raw_shared.overflow_count = 0u;
-        g_raw_shared.running = 1u;
+        g_raw_shared.running = 0u;
 
-        *capture_running = 1u;
-
-        tx_msg.arg0 = now;
-        tx_msg.arg1 = raw_inputs;
+        tx_msg.arg0 = now;        /* arm-request timestamp, not capture start */
+        tx_msg.arg1 = raw_inputs; /* diagnostic pre-arm sample only */
         tx_msg.arg2 = *event_limit;
         break;
 
     case HIL_PRU_MSG_RAW_STOP:
+        if (*start_pending != 0u) {
+            *start_pending = 0u;
+            g_raw_shared.stop_ticks = now;
+            g_raw_shared.stop_reason = HIL_RAW_STOP_HOST_REQUEST;
+            g_raw_shared.running = 0u;
+        }
         if (*capture_running != 0u) {
             publish_stop(
                 HIL_RAW_STOP_HOST_REQUEST,
@@ -266,7 +277,7 @@ static void handle_request(
          */
         g_raw_shared.event_count = *event_count;
         g_raw_shared.final_raw_inputs = raw_inputs;
-        tx_msg.arg0 = *capture_running;
+        tx_msg.arg0 = ((*capture_running != 0u) || (*start_pending != 0u)) ? 1u : 0u;
         tx_msg.arg1 = *event_count;
         tx_msg.arg2 = *event_limit;
         tx_msg.arg3 = g_raw_shared.stop_reason;
@@ -286,6 +297,7 @@ void main(void)
     volatile uint8_t *driver_status;
 
     uint32_t capture_running = 0u;
+    uint32_t start_pending = 0u;
     uint32_t event_count = 0u;
     uint32_t event_limit = HIL_RAW_CAPTURE_CAPACITY;
     uint32_t last_inputs;
@@ -322,8 +334,40 @@ void main(void)
     }
 
     while (1) {
-        uint32_t raw_r31 = __R31;
-        uint32_t raw_inputs = raw_r31 & R31_PWM_INPUT_MASK;
+        uint32_t raw_r31;
+        uint32_t raw_inputs;
+
+        /*
+         * RAW_START is acknowledged first. Only after the response has left
+         * PRU0 do we take a fresh R31/IEP baseline and publish running=1.
+         * This prevents the first raw record from comparing against a stale
+         * control-plane sample and creating a synthetic zero-dead-time edge.
+         */
+        if (start_pending != 0u) {
+            uint32_t baseline_raw = __R31 & R31_PWM_INPUT_MASK;
+            uint32_t baseline_ticks = tick_now();
+
+            event_count = 0u;
+            last_inputs = baseline_raw;
+
+            g_raw_shared.event_count = 0u;
+            g_raw_shared.initial_raw_inputs = baseline_raw;
+            g_raw_shared.final_raw_inputs = baseline_raw;
+            g_raw_shared.start_ticks = baseline_ticks;
+            g_raw_shared.stop_ticks = 0u;
+            g_raw_shared.stop_reason = HIL_RAW_STOP_NONE;
+            g_raw_shared.overflow_count = 0u;
+
+            capture_running = 1u;
+            start_pending = 0u;
+
+            /* Publish running=1 last, after the fresh baseline is complete. */
+            g_raw_shared.running = 1u;
+            continue;
+        }
+
+        raw_r31 = __R31;
+        raw_inputs = raw_r31 & R31_PWM_INPUT_MASK;
 
         if (capture_running != 0u) {
             if (raw_inputs != last_inputs) {
@@ -383,6 +427,7 @@ void main(void)
                     len,
                     raw_inputs,
                     &capture_running,
+                    &start_pending,
                     &last_inputs,
                     &event_count,
                     &event_limit);
