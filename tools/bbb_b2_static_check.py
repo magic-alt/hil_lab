@@ -64,11 +64,20 @@ def main() -> int:
         (r"HIL_PRU_MSG_ABZ_START", "ABZ start command"),
         (r"HIL_PRU_MSG_ABZ_STOP", "ABZ stop command"),
         (r"HIL_PRU_MSG_ABZ_DIRECTION", "ABZ direction command"),
+        (r"HIL_PRU_MSG_ABZ_ARM", "timestamped ABZ arm command"),
+        (r"HIL_PRU_MSG_ABZ_SCHEDULE", "queued ABZ update command"),
+        (r"HIL_PRU_MSG_HALL_CONFIG", "Hall configure command"),
+        (r"HIL_PRU_MSG_HALL_START", "Hall start command"),
+        (r"HIL_PRU_MSG_STIM_STATUS", "common scheduler status"),
         (r"phase = \(phase \+ 1u\) & 3u;", "forward quadrature step"),
         (r"phase = \(phase \+ 3u\) & 3u;", "reverse quadrature step"),
         (r"force_safe_outputs\(\);", "safe output path"),
         (r"next_transition_ticks = now \+ transition_ticks;", "late resynchronization"),
         (r"late_transition_count \+= 1u;", "late transition counter"),
+        (r"start_pending_mode", "ACK-before-run pending state"),
+        (r"armed_apply_ticks", "absolute IEP apply timestamp"),
+        (r"update_apply_ticks", "scheduled update timestamp"),
+        (r"hall_step_to_bits", "Hall six-step mapping"),
     ]:
         require(main_c, pattern, label, errors)
 
@@ -104,11 +113,21 @@ def main() -> int:
         (r"MSG_ABZ_STOP", "host ABZ stop"),
         (r"MSG_ABZ_DIRECTION", "host direction reversal"),
         (r"MSG_FORCE_SAFE", "host force-safe"),
+        (r"MSG_ABZ_ARM", "host timestamped ABZ arm"),
+        (r"MSG_ABZ_SCHEDULE", "host queued ABZ update"),
+        (r"MSG_HALL_CONFIG", "host Hall configure"),
+        (r"MSG_STIM_STATUS", "host scheduler status"),
         (r"/dev/rpmsg_pru31", "host PRU1 port"),
     ]:
         require(host, pattern, label, errors)
 
     forbid(main_c, r"while \(.*transition.*\).*__delay_cycles", "busy-delay edge generation", errors)
+    require(
+        main_c,
+        r"pru_rpmsg_send\([\s\S]{0,1200}if \(start_pending_mode == STIM_MODE_ABZ\)",
+        "ABZ ACK-before-run ordering",
+        errors,
+    )
 
     if errors:
         for error in errors:
@@ -119,6 +138,8 @@ def main() -> int:
     print("  A/B/Z: P8_45/P8_46/P8_43 -> PRU1 R30[0:2]")
     print("  RPMsg: system events 18/19, port 31")
     print("  safe state: A=B=Z=0")
+    print("  scheduler: ACK-before-run + absolute arm + one queued ABZ update")
+    print("  Hall: six-step stimulus on the shared PRU1 R30[0:2] output group")
     return 0
 
 
