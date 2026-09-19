@@ -335,13 +335,14 @@ EtherCAT:
 
 - IgH for the long-running real-time master path;
 - SOEM for discovery, diagnostics and focused test utilities;
-- WKC/DC/cycle-jitter evidence;
+- [x] IgH/SOEM qualification programs emitting WKC/DC/cycle-jitter JSON; physical target measurements remain open;
 - CiA402 CSP/CSV/CST smoke/regression.
 
 CAN/CANopen:
 
 - SocketCAN and vcan CI;
-- NMT/heartbeat/SDO/PDO regression;
+- [x] NMT/heartbeat/expedited-SDO/EMCY/CiA402 state-machine regression;
+- [ ] device-specific PDO mapping regression;
 - CiA402-over-CANopen where supported;
 - communication-loss/recovery scenarios.
 
@@ -349,7 +350,8 @@ CAN/CANopen:
 
 **Goal:** make a bench allocatable and unattended.
 
-- labgrid resource/exporter/coordinator model;
+- [x] labgrid place lease client + local resource locking/session safety wrapper;
+- [ ] actual exporter/coordinator hardware config on the physical bench;
 - pytest fixtures and exclusive resource locking;
 - DUT power/reset/flash hooks;
 - scenario loading and capability checks;

@@ -232,3 +232,8 @@ C5/G0 now share a frozen 4 KiB AXI4-Lite register ABI with fail-safe control, PW
 ### PMSM closed-loop datapath
 
 The plant path now starts from measured PWM duty and includes averaged inverter, Clarke/Park transforms, Q0.32 electrical/mechanical phase accumulation, inverse transforms, DAC current feedback and a 24-bit dynamic encoder word. Physical motor parameters are converted to fixed-point coefficients by `host.hil.plant_params`. See `docs/pmsm-closed-loop-hil.md`.
+
+
+### Industrial fieldbus HIL v2
+
+Track D now includes executable qualification sources for IgH and SOEM, CANopen expedited SDO/EMCY/CiA402 control, cyclictest parsing, labgrid place leasing and a FORCE_SAFE bench-session wrapper. Hardware-only pytest remains separated under `tests/hil/`. See `docs/industrial-fieldbus-hil.md`.

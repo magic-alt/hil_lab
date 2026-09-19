@@ -3,3 +3,5 @@
 from .adapter import IghEthercatCli
 
 __all__ = ["IghEthercatCli"]
+
+from .cycle import EthercatCycleMetrics, IghCycleQualifier

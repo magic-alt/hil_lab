@@ -23,3 +23,6 @@ Still pending physical D0/D1 qualification:
 Ordinary Linux GPIO timing must never be advertised as a deterministic backend capability.
 
 See #47, #48 and #49.
+
+
+Controller v2 adds cyclictest qualification parsing, IgH/SOEM 1 ms cycle executables, CANopen SDO/EMCY/CiA402 and labgrid/pytest session safety. These tools create the evidence; the repository still does not mark physical latency/WKC/DC criteria passed until run on the selected Pi/NIC/DUT.
