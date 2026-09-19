@@ -9,7 +9,7 @@ from boards.raspberry_pi.qualification import CyclictestQualifier, parse_cyclict
 from fieldbus import CommandEvidence
 from fieldbus.canopen import (
     CanFrame, CanopenCiA402Node, CanopenSdoClient, CiA402State,
-    CIA402_RPDO, NmtState, PdoMapping, PdoMappingEntry, SdoAbort,
+    CIA402_RPDO_CSV, NmtState, PdoMapping, PdoMappingEntry, SdoAbort,
     configure_pdo_mapping, decode_state, parse_emcy, wait_for_heartbeat,
     with_node_id,
 )
@@ -120,18 +120,16 @@ def test_cyclictest_qualifier_uses_requested_1ms_period():
 
 
 def test_pdo_codec_and_standard_mapping_sequence():
-    mapping = with_node_id(CIA402_RPDO, 5)
+    mapping = with_node_id(CIA402_RPDO_CSV, 5)
     frame = mapping.encode(
         {
             "controlword": 0x000F,
             "mode": 10,
-            "target_torque": -20,
             "target_velocity": 123456,
         }
     )
     assert frame.can_id == 0x205
     decoded = mapping.decode(frame)
-    assert decoded["target_torque"] == -20
     assert decoded["target_velocity"] == 123456
 
     class Recorder:
