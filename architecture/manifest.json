@@ -32,7 +32,8 @@
     "boards/zynq7010",
     "boards/beaglebone_black",
     "boards/raspberry_pi",
-    "boards/zybo"
+    "boards/zybo",
+    "host/hil/backends"
   ],
   "board_roles": {
     "boards/zu2cg": "full_hil_backend",
