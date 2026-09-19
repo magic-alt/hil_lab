@@ -9,18 +9,18 @@ BUILD_DIR := build
 .PHONY: architecture host-test
 
 RTL_COMMON := rtl/common/sync_2ff.v
-RTL_TIME := rtl/time/hil_timebase.v
-RTL_PWM := rtl/pwm/pwm_capture.v rtl/pwm/pwm_complementary_monitor.v
+RTL_TIME := rtl/common/timebase/hil_timebase.v
+RTL_CAPTURE := rtl/capture/pwm_capture.v rtl/capture/pwm_complementary_monitor.v
 RTL_ENCODER := rtl/encoder/abz_encoder_emulator.v rtl/encoder/spi_encoder_emulator.v
 RTL_IO := rtl/io/dio_event_scheduler.v
 RTL_TOP := rtl/top/hil_digital_core.v
-RTL := $(RTL_COMMON) $(RTL_TIME) $(RTL_PWM) $(RTL_ENCODER) $(RTL_IO) $(RTL_TOP)
+RTL := $(RTL_COMMON) $(RTL_TIME) $(RTL_CAPTURE) $(RTL_ENCODER) $(RTL_IO) $(RTL_TOP)
 
 ZYNQ7010_BOARD_RTL := $(RTL_COMMON) $(RTL_TIME) \
-	rtl/pwm/pwm_capture.v rtl/pwm/pwm_complementary_monitor.v \
+	rtl/capture/pwm_capture.v rtl/capture/pwm_complementary_monitor.v \
 	rtl/pwm/pwm_complementary_generator.v \
-	rtl/encoder/abz_encoder_emulator.v rtl/encoder/abz_encoder_capture.v \
-	rtl/encoder/ssi_encoder_emulator.v rtl/encoder/ssi_encoder_master_capture.v \
+	rtl/encoder/abz_encoder_emulator.v rtl/capture/abz_encoder_capture.v \
+	rtl/encoder/ssi_encoder_emulator.v rtl/capture/ssi_encoder_master_capture.v \
 	boards/zynq7010/rtl/ax7010_clock_gen.v boards/zynq7010/rtl/ax7010_fpga_lite_top.v
 ZYNQ7010_MOTOR_RTL := rtl/motor/pmsm_dq_plant_q16.v
 
@@ -62,11 +62,11 @@ lint:
 test: test-pwm test-deadtime test-abz test-spi test-event
 
 test-pwm: $(BUILD_DIR)
-	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pwm_capture.vvp $(RTL_COMMON) $(RTL_TIME) rtl/pwm/pwm_capture.v sim/tb_pwm_capture.v
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pwm_capture.vvp $(RTL_COMMON) $(RTL_TIME) rtl/capture/pwm_capture.v sim/tb_pwm_capture.v
 	$(VVP) $(BUILD_DIR)/tb_pwm_capture.vvp
 
 test-deadtime: $(BUILD_DIR)
-	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pwm_complementary_monitor.vvp $(RTL_COMMON) $(RTL_TIME) rtl/pwm/pwm_complementary_monitor.v sim/tb_pwm_complementary_monitor.v
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pwm_complementary_monitor.vvp $(RTL_COMMON) $(RTL_TIME) rtl/capture/pwm_complementary_monitor.v sim/tb_pwm_complementary_monitor.v
 	$(VVP) $(BUILD_DIR)/tb_pwm_complementary_monitor.vvp
 
 test-abz: $(BUILD_DIR)
@@ -116,11 +116,11 @@ zynq7010-compile: $(BUILD_DIR)
 	$(IVERILOG) -g2005 -Wall -s pmsm_dq_plant_q16 -o $(BUILD_DIR)/pmsm_dq_plant_q16.vvp $(ZYNQ7010_MOTOR_RTL)
 
 zynq7010-test: $(BUILD_DIR)
-	$(IVERILOG) -g2012 -Wall -s tb_pwm_complementary_generator -o $(BUILD_DIR)/tb_pwm_complementary_generator.vvp $(RTL_COMMON) rtl/pwm/pwm_capture.v rtl/pwm/pwm_complementary_generator.v sim/tb_pwm_complementary_generator.v
+	$(IVERILOG) -g2012 -Wall -s tb_pwm_complementary_generator -o $(BUILD_DIR)/tb_pwm_complementary_generator.vvp $(RTL_COMMON) rtl/capture/pwm_capture.v rtl/pwm/pwm_complementary_generator.v sim/tb_pwm_complementary_generator.v
 	$(VVP) $(BUILD_DIR)/tb_pwm_complementary_generator.vvp
-	$(IVERILOG) -g2012 -Wall -s tb_abz_encoder_capture -o $(BUILD_DIR)/tb_abz_encoder_capture.vvp $(RTL_COMMON) rtl/encoder/abz_encoder_emulator.v rtl/encoder/abz_encoder_capture.v sim/tb_abz_encoder_capture.v
+	$(IVERILOG) -g2012 -Wall -s tb_abz_encoder_capture -o $(BUILD_DIR)/tb_abz_encoder_capture.vvp $(RTL_COMMON) rtl/encoder/abz_encoder_emulator.v rtl/capture/abz_encoder_capture.v sim/tb_abz_encoder_capture.v
 	$(VVP) $(BUILD_DIR)/tb_abz_encoder_capture.vvp
-	$(IVERILOG) -g2012 -Wall -s tb_ssi_encoder_loopback -o $(BUILD_DIR)/tb_ssi_encoder_loopback.vvp $(RTL_COMMON) rtl/encoder/ssi_encoder_emulator.v rtl/encoder/ssi_encoder_master_capture.v sim/tb_ssi_encoder_loopback.v
+	$(IVERILOG) -g2012 -Wall -s tb_ssi_encoder_loopback -o $(BUILD_DIR)/tb_ssi_encoder_loopback.vvp $(RTL_COMMON) rtl/encoder/ssi_encoder_emulator.v rtl/capture/ssi_encoder_master_capture.v sim/tb_ssi_encoder_loopback.v
 	$(VVP) $(BUILD_DIR)/tb_ssi_encoder_loopback.vvp
 	$(IVERILOG) -g2012 -Wall -s tb_pmsm_dq_plant_q16 -o $(BUILD_DIR)/tb_pmsm_dq_plant_q16.vvp $(ZYNQ7010_MOTOR_RTL) sim/tb_pmsm_dq_plant_q16.v
 	$(VVP) $(BUILD_DIR)/tb_pmsm_dq_plant_q16.vvp
