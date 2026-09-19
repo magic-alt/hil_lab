@@ -1,177 +1,101 @@
-# Architecture — Multi-Backend Signal-Level Servo HIL
+# Architecture — Multi-Backend Servo HIL v2
 
 ## Objective
 
-`hil_lab` validates servo-controller firmware while keeping high-energy inverter/motor behavior outside the first-generation bench.
+hil_lab is a signal-level HIL and automated-test platform for servo drives and robotic actuators. Architecture v2 separates deterministic signal execution from Linux orchestration so each board is used for the job it is technically good at.
 
-The architecture now separates:
+## Four roles
 
-- **host/test semantics**;
-- **real-time backend implementations**;
-- **electrical DUT adaptation**.
+| Track | Platform | Role |
+|---|---|---|
+| A | ZU2CG / AXU2CGB | Full-HIL reference: FPGA timing, analog feedback, PMSM and later joint models |
+| B | BeagleBone Black / AM3358 PRU | Digital-HIL / ServoBus analyzer: capture, timestamp, encoder/sensor stimulus, digital faults |
+| C | Zynq-7010 / AX7010, later Zybo | FPGA-Lite: parallel signal HIL and resource-bounded single-motor plant |
+| D | Raspberry Pi 4/5 | Linux HIL Controller: fieldbus, pytest/labgrid, DUT lifecycle, artifacts |
 
-This permits a ZU2CG FPGA Full-HIL backend, a Zynq-7010 FPGA-Lite backend and a BeagleBone Black PRU Digital-HIL backend to coexist without forcing any platform into another backend's implementation model.
+The first three are deterministic backends. Track D is a controller/service plane.
 
-## System layering
+## Layering
 
-```text
-+-------------------------------------------------------------+
-| Host / pytest / future Servo CI                             |
-| test intent, limits, reports, DUT lifecycle                 |
-+-----------------------------+-------------------------------+
-                              |
-                              | common backend contract
-                              | capabilities + commands + events
-                              v
-              +---------------+----------------+
-              |                                |
-              v                                v
-+-----------------------------+   +-----------------------------+
-| ZU2CG / AXU2CGB backend     |   | BBB / AM3358 PRU backend   |
-|                             |   |                             |
-| FPGA timebase               |   | PRU-local timestamp         |
-| PWM/dead-time capture       |   | PWM/dead-time capture       |
-| ABZ/SPI emulation           |   | ABZ generation              |
-| deterministic DIO           |   | deterministic fault GPIO    |
-| DAC/analog feedback         |   | digital-only first scope    |
-| PMSM plant (G2+)            |   |                             |
-+--------------+--------------+   +--------------+--------------+
-               |                                 |
-               +---------------+-----------------+
-                               |
-                               v
-+-------------------------------------------------------------+
-| Protected HIL I/O / DUT adapter                             |
-| level shift / differential drivers / isolation / clamps     |
-| analog switches / relays only where reviewed                |
-+-----------------------------+-------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-| Servo controller DUT: GD32/HPM MCU + low-voltage interfaces |
-+-------------------------------------------------------------+
-```
+~~~text
+test intent / pytest / labgrid / optional ROS2
+                    |
+              host.hil contract
+        capability + scenario + evidence
+                    |
+       +------------+-------------+
+       |            |             |
+     ZU2CG        AX7010         BBB PRU
+       |            |             |
+       +------- protected DUT -----+
+                    |
+                servo DUT
 
-## Control plane vs real-time data plane
+fieldbus/ is driven by the Linux controller and participates in the same
+scenario/evidence model without moving edge timing into Linux userspace.
+~~~
 
-Linux owns the **control plane**:
+## Ownership rules
 
-- configure tests;
-- load parameters;
-- arm events;
-- collect measurements;
-- write reports;
-- manage DUT lifecycle.
+Linux owns configuration, DUT lifecycle, fieldbus commands, resource locking, reports and artifact collection.
 
-FPGA PL or PRU owns the **real-time data plane**:
+FPGA PL or PRU owns edge capture, hardware timestamps, encoder/sensor transitions, local queued events, hard safe-state actions and plant stepping.
 
-- edge capture;
-- interval measurement;
-- encoder transition generation;
-- timestamped GPIO events;
-- other deterministic operations.
+A backend must never advertise a deterministic capability that is implemented by ordinary Linux userspace sleeps or GPIO toggles.
 
-A backend must never implement a nominally deterministic capability with ordinary Linux userspace timing merely to satisfy the common API.
+## Time contract
 
-## Timing contract
+Hardware time is represented by ticks, tick_hz and counter_bits. Raw ticks remain in evidence. Conversion to SI time is derived metadata.
 
-The common contract represents hardware time as:
+Cross-device correlation may use NTP/PTP or measured trigger relationships, but host wall-clock time never replaces backend timestamps for timing assertions.
 
-- a raw monotonic tick counter;
-- a declared tick frequency;
-- explicit counter width/rollover behavior.
+## Scenario model
 
-Host software may convert ticks to SI time, but raw timing evidence must remain available.
+A host scenario declares required capabilities and timestamp-ordered actions. The host validates support before execution. A deterministic backend may translate scenario actions into a local queue so Linux is not responsible for firing real-time edges.
 
-The ZU2CG G0 reference uses a 100 MHz FPGA clock (10 ns/tick). The AX7010 FPGA-Lite target also derives a 100 MHz HIL clock from its 50 MHz PL oscillator.
+The first versioned example is lab/scenarios/smoke_pwm_abz_fault.json.
 
-The BBB PRU time source is selected and physically characterized in B0 (#11). Its exact timer implementation must not be assumed by host tests before B0 freezes it.
+## Source architecture
 
-Cross-backend tests compare semantic quantities and declared tolerances; they do not assume identical quantization.
+Architecture v2 target taxonomy:
 
-## ZU2CG backend
+~~~text
+rtl/common/{timebase,fifo,snapshot,fault}
+rtl/capture
+rtl/generator
+rtl/plant
+rtl/scenario
 
-The FPGA backend remains the Full-HIL reference.
+pru/{capture,timestamp,protocol,shared_memory}
+fieldbus/ethercat/{igh,soem,soes}
+fieldbus/canopen
+host/{hil,cli,ros2}
+tests/{unit,cocotb,pytest,hil}
+lab/{labgrid,resources,scenarios}
+~~~
 
-Reusable blocks include:
+Existing verified RTL remains in rtl/time, rtl/pwm, rtl/encoder, rtl/io, rtl/motor and rtl/dac until each family is migrated with all Makefile and Vivado references in one PR. See migration-v2.md.
 
-- `hil_timebase`;
-- `pwm_capture`;
-- `pwm_complementary_monitor`;
-- `abz_encoder_emulator`;
-- `spi_encoder_emulator`;
-- `dio_event_scheduler`.
+## Board boundaries
 
-Board-specific clocking, pins and future analog interfaces stay under `boards/zu2cg/`.
+### ZU2CG
 
-G1+ extends this backend with deterministic DAC output, then PMSM and robotic-joint plant models.
+Full-HIL reference. Board-specific clocking, constraints and analog wiring remain under boards/zu2cg. G1+ adds DAC feedback, G2 PMSM closed loop, G3 custom analog I/O and G6 joint dynamics.
 
-## Zynq-7010 FPGA-Lite backend
+### AX7010 / Zybo
 
-The XC7Z010 lane fills the gap between software-programmable PRU Digital-HIL
-and the larger ZU2CG Full-HIL fabric.
+FPGA-Lite. Reuse generic Verilog cores; keep XDC/clock/board top separate. Zybo is a secondary XC7Z010 constraints target, not a fork of the logic.
 
-The first board target is ALINX AX7010 because it exposes two 34-I/O PL
-expansion headers and a dedicated 50 MHz PL clock. Board-specific integration
-stays under `boards/zynq7010/`; reusable PWM/encoder/motor blocks stay under
-the root `rtl/` hierarchy.
+### BeagleBone Black
 
-Initial responsibilities:
+PRU keeps deterministic I/O local. Current board-specific firmware remains under boards/beaglebone_black while top-level pru defines reusable architecture boundaries. Do not duplicate firmware merely to satisfy the directory layout.
 
-- deterministic complementary PWM generation plus parallel capture;
-- ABZ generation and capture;
-- SSI/SPI-style synchronous encoder emulation/acquisition;
-- deterministic digital faults;
-- a Q16.16 fixed-step single-motor PMSM-lite plant;
-- later AXI-Lite/BRAM control from the Cortex-A9 PS.
+### Raspberry Pi
 
-The PS/Linux side is a control plane only. PWM edges, encoder timing and motor
-model stepping remain in PL.
-
-Zynq-7010 does not replace the ZU2CG backend for high-channel-count ADC/DAC,
-multi-axis models, dual-inertia joint dynamics or final Full-HIL expansion.
-
-## BBB PRU backend
-
-BBB is a companion backend optimized for fast digital servo-firmware testing.
-
-Initial responsibilities:
-
-- B0: PRU lifecycle/transport/timebase/safe-state;
-- B1: PWM and dead-time capture;
-- B2: ABZ output;
-- B3: deterministic digital fault/stimulus scheduling.
-
-A reference partition may use one PRU primarily for capture and the other primarily for generation/events, but B0 measurements decide the final partition. Do not freeze the split before resource/timing characterization.
-
-BBB does not initially implement:
-
-- analog sensor synthesis;
-- PMSM plant execution;
-- custom ADC/DAC HIL;
-- a replacement for G2/G3/G6.
-
-## Backend capability model
-
-See `docs/backend-contract.md`.
-
-Tests should request capabilities such as PWM capture or ABZ generation. A backend that does not support a required capability must return an explicit unsupported result so pytest can skip/fail with a clear reason.
-
-## Communications boundary
-
-CAN/CAN FD, RS-485 and EtherCAT remain outside the reusable real-time cores until physical/transceiver ownership is fixed.
-
-An external communications host can participate in a HIL scenario. For example, a Raspberry Pi running an EtherCAT master may command the servo DUT while ZU2CG/BBB observes or injects signal-level behavior. This does not require an EtherCAT master implementation inside FPGA PL or PRU.
+Runs host/controller services, IgH/SOEM, SocketCAN/CANopen, pytest/labgrid and optional ROS2. PREEMPT_RT is a measurable configuration, not proof of EtherCAT performance by itself.
 
 ## Safety invariant
 
-Every backend must have a local safe state independent of host responsiveness.
+Every deterministic backend has a local force-safe/watchdog behavior independent of host responsiveness. Signal adapters own level translation, isolation, differential drivers, clamping and reviewed fault insertion.
 
-Examples:
-
-- disable external analog-output enable;
-- drive encoder/fault outputs to documented benign states;
-- clear scheduled events on reset unless explicitly persisted;
-- use a watchdog for host-controlled potentially active stimulus.
-
-High-energy power nodes remain out of scope.
+High-energy DC-bus, motor-phase and brake-power fault injection remains out of Generation 1 scope.

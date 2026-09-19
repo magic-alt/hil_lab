@@ -21,7 +21,7 @@ jobs:
       - name: Install verification tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y iverilog verilator make python3
+          sudo apt-get install -y iverilog verilator make python3 python3-pytest
 
       - name: Verify FPGA and BBB software gates
         run: make verify

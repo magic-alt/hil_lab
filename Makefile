@@ -1,9 +1,12 @@
 PYTHON ?= python3
+PYTEST ?= pytest
 IVERILOG ?= iverilog
 VVP ?= vvp
 VERILATOR ?= verilator
 
 BUILD_DIR := build
+
+.PHONY: architecture host-test
 
 RTL_COMMON := rtl/common/sync_2ff.v
 RTL_TIME := rtl/time/hil_timebase.v
@@ -33,13 +36,19 @@ BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 
 all: verify
 
-verify: policy compile test lint dac-compile dac-test dac-pattern-test dac-lint \
+verify: architecture host-test policy compile test lint dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
 	zynq7010-constraints zynq7010-compile zynq7010-test zynq7010-lint \
 	bbb-check mcu-pwm-check
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+architecture:
+	$(PYTHON) tools/architecture_check.py
+
+host-test:
+	$(PYTEST) -q tests/pytest
 
 policy:
 	$(PYTHON) tools/rtl_policy_check.py

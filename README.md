@@ -2,11 +2,12 @@
 
 `hil_lab` is a signal-level hardware-in-the-loop (HIL) and automated-test platform for servo drives and robotic actuators.
 
-The project now has **three cooperating real-time backends**:
+The project now has **three cooperating deterministic backends plus one Linux HIL controller plane**:
 
 - **Track A — ZU2CG / AXU2CGB Full HIL (primary):** FPGA digital timing, DAC/analog feedback, PMSM plant, custom ADC/DAC hardware and later robotic-joint models.
 - **Track B — BeagleBone Black / AM3358 PRU Digital HIL (companion):** fast PWM measurement, ABZ generation, deterministic digital fault/stimulus I/O and rapid servo-firmware regression.
 - **Track C — Zynq-7010 / AX7010 FPGA-Lite HIL:** low-cost parallel FPGA signal HIL, PWM generation/capture, encoder generation/capture and a resource-bounded single-motor plant.
+- **Track D — Raspberry Pi 4/5 HIL Controller:** pytest/labgrid orchestration, EtherCAT/CANopen, DUT lifecycle and evidence collection. It is a control plane, not a timing-critical signal backend.
 
 BBB and Zynq-7010 do **not** replace the Zynq MPSoC roadmap. They provide lower-cost deterministic test targets while ZU2CG continues toward the full closed-loop multi-axis plant.
 
@@ -57,31 +58,40 @@ The new companion track is split into:
 
 ## Architecture
 
-```text
-                    host / pytest / Servo CI
-                             |
-                    common HIL contract
-                 capability + time + events
-                    /                   \
-                   /                     \
-        ZU2CG / AXU2CGB               BBB / AM3358
-        Full-HIL backend              PRU digital backend
-        ----------------              -------------------
-        FPGA timebase                 PRU timestamp
-        PWM capture                   PWM capture
-        ABZ/SPI emulation             ABZ generation
-        deterministic DIO             fault/stimulus GPIO
-        DAC / analog feedback         digital only
-        PMSM plant (future)           no PMSM requirement
-                |                           |
-                +------------+--------------+
-                             |
-                     protected DUT adapter
-                             |
-                      GD32/HPM servo DUT
-```
+Architecture v2 separates the bench into deterministic data planes and a Linux control plane:
 
-Cross-platform reuse is at the **semantic contract and test layer**. FPGA RTL and PRU firmware remain platform-specific where that produces the most deterministic implementation.
+~~~text
+                         Raspberry Pi 4/5
+              pytest / labgrid / fieldbus / ROS2(optional)
+                              control plane
+                                  |
+                    common host.hil contract
+                   capability + scenario + evidence
+                   /              |              \
+                  /               |               \
+       ZU2CG Full-HIL       AX7010 FPGA-Lite      BBB PRU
+       deterministic PL     deterministic PL      deterministic PRU
+       + analog/PMSM        + signal/PMSM-lite    + digital analyzer
+                  \               |               /
+                   +-------------- DUT -----------+
+                                  |
+                       protected signal adapter
+~~~
+
+The controller may command EtherCAT/CANopen traffic while a hardware backend captures PWM, generates encoder/sensor feedback and fires deterministic faults. Linux must not bit-bang a capability that is advertised as deterministic.
+
+The Architecture v2 target taxonomy is created now, while legacy RTL paths remain build-compatible during migration:
+
+- common timing/snapshot/fault primitives under rtl/common;
+- acquisition blocks under rtl/capture;
+- deterministic stimulus under rtl/generator;
+- motor/joint models under rtl/plant;
+- trigger/sequence/fault orchestration under rtl/scenario;
+- backend-neutral Python under host/hil;
+- protocol adapters under fieldbus;
+- bench resources/scenarios under lab.
+
+See docs/migration-v2.md for the no-big-bang migration rules.
 
 ## Safety boundary
 
@@ -101,28 +111,38 @@ A host crash or communication loss must never leave a hazardous stimulus asserte
 
 ## Repository layout
 
-```text
+~~~text
 hil_lab/
-├── rtl/                         reusable Zynq/FPGA Verilog-2001 RTL
-├── sim/                         self-checking FPGA simulations
+├── architecture/                 machine-readable architecture manifest
+├── rtl/
+│   ├── common/{timebase,fifo,snapshot,fault}/
+│   ├── capture/                  target landing zone; legacy rtl/pwm+encoder still build
+│   ├── generator/                target landing zone for PWM/encoder/sensor stimulus
+│   ├── plant/                    PMSM / mechanics / dual-inertia models
+│   └── scenario/                 sequencer / trigger / deterministic fault logic
+├── pru/{capture,timestamp,protocol,shared_memory}/
+├── fieldbus/
+│   ├── ethercat/{igh,soem,soes}/
+│   └── canopen/
+├── host/
+│   ├── hil/                      backend-neutral Python contract + scenarios
+│   ├── cli/
+│   └── ros2/
+├── tests/{unit,cocotb,pytest,hil}/
+├── lab/{labgrid,resources,scenarios}/
 ├── boards/
-│   ├── zu2cg/                   AXU2CGB board integration
-│   ├── zynq7010/                AX7010 FPGA-Lite HIL backend
-│   ├── beaglebone_black/        PRU digital-HIL backend
-│   ├── stm32f429i_disc1/        Keil TIM8 U-pair PWM stimulus
-│   ├── hpm6e00evk/              HPM SDK PWMV2 six-PWM stimulus
-│   └── gd32h75ey_eval/          Keil TIMER0 six-PWM stimulus
+│   ├── zu2cg/                    AXU2CGB Full-HIL
+│   ├── zynq7010/                 AX7010 FPGA-Lite
+│   ├── zybo/                     secondary XC7Z010 target
+│   ├── beaglebone_black/         AM3358 PRU Digital-HIL
+│   └── raspberry_pi/             Linux HIL Controller
+├── sim/                          existing RTL self-checking simulations
 ├── docs/
-│   ├── architecture.md
-│   ├── backend-contract.md      shared behavioral contract
-│   ├── io-contract.md
-│   └── testing.md
 ├── tools/
-├── .github/
-├── AGENTS.md
-├── Makefile
-└── ROADMAP.md
-```
+└── Makefile
+~~~
+
+Existing rtl/time, rtl/pwm, rtl/encoder, rtl/io, rtl/motor and rtl/dac paths remain valid until each module family is migrated together with Makefile/Vivado references.
 
 ## Verification
 
@@ -181,3 +201,13 @@ ZU2CG Full-HIL:
 
 The first target is AX7010. Zybo(7010) support should reuse the same cores and
 add only board-specific clock/pin/electrical integration where possible.
+
+
+### Track D — Linux HIL Controller
+
+1. D0 #47 Raspberry Pi controller baseline and measured RT-Linux behavior
+2. D1 #48 EtherCAT IgH/SOEM plus CANopen/SocketCAN
+3. D2 #49 labgrid/pytest resource orchestration and evidence retention
+4. optional ROS2/ros2_control and observability only above stable core interfaces
+
+Track D coordinates the bench; it does not replace PL/PRU deterministic timing.
