@@ -1,5 +1,5 @@
 PYTHON ?= python3
-PYTEST ?= pytest
+PYTEST ?= $(PYTHON) -m pytest
 IVERILOG ?= iverilog
 VVP ?= vvp
 VERILATOR ?= verilator
