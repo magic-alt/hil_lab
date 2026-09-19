@@ -16,7 +16,7 @@ LINKER_COMMAND_FILE := ../pru1_b2/AM335x_PRU_B2.cmd
 
 CFLAGS := -v3 -O3 --display_error_number --endian=little --hardware_mac=on \
 	--obj_directory=$(GEN_DIR) --pp_directory=$(GEN_DIR) -ppd -ppa
-LFLAGS := --reread_libs --warn_sections --stack_size=0x100 --heap_size=0x100
+LFLAGS := --reread_libs --warn_sections --stack_size=0x400 --heap_size=0x100
 INCLUDES := --include_path=$(PRU_CGT)/include \
 	--include_path=$(PSSP_DIR)/include \
 	--include_path=$(PSSP_DIR)/include/am335x \
