@@ -9,7 +9,9 @@ from boards.raspberry_pi.qualification import CyclictestQualifier, parse_cyclict
 from fieldbus import CommandEvidence
 from fieldbus.canopen import (
     CanFrame, CanopenCiA402Node, CanopenSdoClient, CiA402State,
-    NmtState, SdoAbort, decode_state, parse_emcy, wait_for_heartbeat,
+    CIA402_RPDO, NmtState, PdoMapping, PdoMappingEntry, SdoAbort,
+    configure_pdo_mapping, decode_state, parse_emcy, wait_for_heartbeat,
+    with_node_id,
 )
 from fieldbus.ethercat.igh.cycle import IghCycleQualifier
 from fieldbus.ethercat.soem.cycle import SoemCycleQualifier
@@ -115,3 +117,46 @@ def test_cyclictest_qualifier_uses_requested_1ms_period():
     evidence,metrics=q.run(seconds=1,interval_us=1000)
     assert metrics.max_us==9
     assert "1000" in evidence.argv
+
+
+def test_pdo_codec_and_standard_mapping_sequence():
+    mapping = with_node_id(CIA402_RPDO, 5)
+    frame = mapping.encode(
+        {
+            "controlword": 0x000F,
+            "mode": 10,
+            "target_torque": -20,
+            "target_velocity": 123456,
+        }
+    )
+    assert frame.can_id == 0x205
+    decoded = mapping.decode(frame)
+    assert decoded["target_torque"] == -20
+    assert decoded["target_velocity"] == 123456
+
+    class Recorder:
+        def __init__(self):
+            self.calls = []
+        def download_u32(self, *args): self.calls.append(("u32",) + args)
+        def download_u8(self, *args): self.calls.append(("u8",) + args)
+
+    recorder = Recorder()
+    configure_pdo_mapping(
+        recorder,
+        mapping_index=0x1600,
+        communication_index=0x1400,
+        mapping=mapping,
+        transmission_type=1,
+    )
+    assert recorder.calls[0] == ("u32", 0x1400, 1, mapping.cob_id | 0x80000000)
+    assert ("u8", 0x1600, 0, len(mapping.entries)) in recorder.calls
+    assert recorder.calls[-1] == ("u32", 0x1400, 1, mapping.cob_id)
+
+
+def test_pdo_rejects_payload_above_classic_can_limit():
+    entries = tuple(
+        PdoMappingEntry(f"x{i}", 0x2000 + i, 0, 32)
+        for i in range(3)
+    )
+    with pytest.raises(ValueError, match="64 bits"):
+        PdoMapping(0x200, entries)

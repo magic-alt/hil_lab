@@ -15,6 +15,7 @@ CHECKS={
     ],
     "fieldbus/canopen/sdo.py":["0x2F","0x2B","0x23","SdoAbort"],
     "fieldbus/canopen/cia402.py":["0x6040","0x6041","OPERATION_ENABLED"],
+    "fieldbus/canopen/pdo.py":["mapping_value","0x80000000","configure_pdo_mapping"],
     "lab/labgrid/client.py":["acquire","release","labgrid-client"],
     "lab/session.py":["force_safe(True)"],
 }

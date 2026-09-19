@@ -29,6 +29,8 @@ Controller v2 implements:
 - NMT and heartbeat;
 - expedited SDO upload/download (1..4 bytes) and abort decoding;
 - EMCY parsing;
+- configurable RPDO/TPDO payload codec;
+- standard SDO-based PDO disable/remap/re-enable sequence;
 - CiA402 state decoding and controlword progression;
 - a safe SDO-based `CanopenCiA402Node` bring-up path;
 - SocketCAN remains the real Linux transport.

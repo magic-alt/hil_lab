@@ -2,6 +2,14 @@
 
 from .cia402 import CanopenCiA402Node, CiA402State, decode_state, next_controlword
 from .emcy import Emcy, parse_emcy
+from .pdo import (
+    CIA402_RPDO,
+    CIA402_TPDO,
+    PdoMapping,
+    PdoMappingEntry,
+    configure_pdo_mapping,
+    with_node_id,
+)
 from .nmt import (
     Heartbeat,
     NmtCommand,
@@ -18,6 +26,8 @@ __all__ = [
     "Heartbeat", "NmtCommand", "NmtState", "build_nmt_frame",
     "parse_heartbeat", "wait_for_heartbeat",
     "CanopenSdoClient", "SdoAbort", "SdoUpload",
+    "PdoMappingEntry", "PdoMapping", "configure_pdo_mapping",
+    "CIA402_RPDO", "CIA402_TPDO", "with_node_id",
     "Emcy", "parse_emcy",
     "CanopenCiA402Node", "CiA402State", "decode_state", "next_controlword",
 ]
