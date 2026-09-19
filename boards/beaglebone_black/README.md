@@ -1,6 +1,6 @@
 # BeagleBone Black / AM3358 PRU backend
 
-Status: **B0 runtime path validated; B1 PWM capture implementation in progress**. See #11-#15.
+Status: **B0/B1 runtime-qualified; B2 stimulus/emulation development active**. See #11-#15.
 
 BeagleBone Black is the companion Digital-HIL backend. ZU2CG/AXU2CGB remains the primary Full-HIL path for DAC/analog feedback, PMSM plant execution, custom ADC/DAC hardware and robotic-joint models.
 
@@ -52,6 +52,15 @@ RPMsg remains the control plane only:
 Individual PWM edges are never sent as one RPMsg each.
 
 Detailed B1 notes: [B1_PWM_CAPTURE.md](B1_PWM_CAPTURE.md).
+
+## B2 PRU1 stimulus / encoder emulation
+
+B2 keeps deterministic stimulus generation on PRU1. The current implementation
+covers ABZ with timestamped scheduling, Hall six-step generation and an
+alternate SSI/BiSS-C/SPI-style serial-emulator firmware.
+
+Detailed B2 notes: [B2_STIMULUS.md](B2_STIMULUS.md).
+
 
 ## B1 fixed first-board pin map
 
