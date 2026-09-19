@@ -79,6 +79,7 @@
 #define HIL_PRU_MSG_SERIAL_START   (29u)
 #define HIL_PRU_MSG_SERIAL_STOP    (30u)
 #define HIL_PRU_MSG_SERIAL_STATUS  (31u)
+#define HIL_PRU_MSG_STIM_STATUS    (32u)
 #define HIL_PRU_MSG_RESPONSE_BIT   (0x8000u)
 
 #define HIL_PRU_STATUS_OK              (0u)
