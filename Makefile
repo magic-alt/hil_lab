@@ -6,7 +6,7 @@ VERILATOR ?= verilator
 
 BUILD_DIR := build
 
-.PHONY: architecture host-test
+.PHONY: architecture host-test industrial-static
 
 RTL_COMMON := rtl/common/sync_2ff.v
 RTL_TIME := rtl/common/timebase/hil_timebase.v
@@ -38,7 +38,7 @@ BOARD_RTL := $(RTL) $(RTL_PLANT) $(RTL_DAC) $(AXU2CGB_RTL)
 
 all: verify
 
-verify: architecture host-test policy compile test lint zynq-axi-check dac-compile dac-test dac-pattern-test dac-lint \
+verify: architecture host-test industrial-static policy compile test lint zynq-axi-check dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
 	zynq7010-constraints zynq7010-compile zynq7010-test zynq7010-lint \
 	bbb-check mcu-pwm-check
@@ -51,6 +51,9 @@ architecture:
 
 host-test:
 	$(PYTEST) -q tests/pytest
+
+industrial-static:
+	$(PYTHON) tools/industrial_hil_static_check.py
 
 policy:
 	$(PYTHON) tools/rtl_policy_check.py

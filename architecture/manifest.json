@@ -40,7 +40,9 @@
     "host/hil/transports",
     "boards/zynq7010/linux",
     "boards/zu2cg/linux",
-    "host/hil/plant_params.py"
+    "host/hil/plant_params.py",
+    "lab/session.py",
+    "boards/raspberry_pi/qualification.py"
   ],
   "board_roles": {
     "boards/zu2cg": "full_hil_backend",
