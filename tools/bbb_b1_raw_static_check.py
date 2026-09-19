@@ -54,7 +54,7 @@ def main() -> int:
         require(abi, pattern, label, errors)
 
     for pattern, label in [
-        (r"uint32_t raw_r31 = __R31;", "single R31 loop sample"),
+        (r"raw_r31 = __R31;", "single R31 loop sample"),
         (r"raw_inputs = raw_r31 & R31_PWM_INPUT_MASK;", "native raw input mask"),
         (r"if \(raw_inputs != last_inputs\)", "raw edge gate"),
         (r"timestamp_ticks = tick_now\(\);", "IEP timestamp"),
