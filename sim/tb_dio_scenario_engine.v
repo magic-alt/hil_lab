@@ -121,7 +121,7 @@ module tb_dio_scenario_engine;
             errors = errors + 1;
         end
 
-        @(negedge clk);
+        wait (event_applied_pulse == 1'b0);
         wait (event_applied_pulse == 1'b1);
         if ((applied_event_id != 8'd2) || (dio_out != 8'ha5)) begin
             $display("ERROR: second event id=%0d dio=%02x", applied_event_id, dio_out);
