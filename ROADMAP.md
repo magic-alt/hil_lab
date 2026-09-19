@@ -69,11 +69,12 @@ Remaining physical exit criteria:
 
 Scope (#4):
 
-- averaged inverter model;
-- PMSM dq electrical model;
-- mechanical inertia/friction model;
-- PWM -> plant -> DAC feedback loop;
-- simulated rotor state driving encoder feedback;
+- [x] averaged inverter model;
+- [x] PMSM dq electrical model;
+- [x] mechanical inertia/friction model;
+- [x] PWM measurement -> duty -> inverter -> Clarke/Park datapath;
+- [x] inverse-transform current feedback and DAC code mapping;
+- [x] simulated rotor phase driving a 24-bit encoder feedback word;
 - explicit fixed-step and end-to-end latency budget.
 
 Exit criteria:

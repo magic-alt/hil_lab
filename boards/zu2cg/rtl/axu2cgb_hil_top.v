@@ -6,7 +6,21 @@ module axu2cgb_hil_top #(
     parameter SPI_FRAME_BITS = 24,
     parameter [SPI_FRAME_BITS-1:0] SPI_FRAME_DATA = 24'hA55A3C,
     parameter MIN_DEADTIME_TICKS = 50,
-    parameter DAC_STARTUP_DELAY_CYCLES = 1000000
+    parameter DAC_STARTUP_DELAY_CYCLES = 1000000,
+    parameter signed [31:0] PLANT_VBUS_Q16 = 32'sd3145728,
+    parameter [15:0] PLANT_POLE_PAIRS = 16'd10,
+    parameter signed [31:0] PLANT_K_VD_Q16 = 32'sd5434,
+    parameter signed [31:0] PLANT_K_VQ_Q16 = 32'sd5434,
+    parameter signed [31:0] PLANT_K_R_D_Q16 = 32'sd3771,
+    parameter signed [31:0] PLANT_K_R_Q_Q16 = 32'sd3771,
+    parameter signed [31:0] PLANT_K_CROSS_D_Q16 = 32'sd3,
+    parameter signed [31:0] PLANT_K_CROSS_Q_Q16 = 32'sd3,
+    parameter signed [31:0] PLANT_K_FLUX_Q16 = 32'sd34,
+    parameter signed [31:0] PLANT_K_TORQUE_Q16 = 32'sd6160,
+    parameter signed [31:0] PLANT_K_ACCEL_Q16 = 32'sd32768,
+    parameter signed [31:0] PLANT_K_DAMP_Q16 = 32'sd3,
+    parameter signed [31:0] PLANT_K_THETA_Q16 = 32'sd1,
+    parameter signed [31:0] PLANT_K_RAD_TO_TURN_Q32 = 32'sd34178
 ) (
     input  wire                      pl_ref_clk,
     input  wire [2:0]                pwm_high_in,
@@ -78,10 +92,24 @@ module axu2cgb_hil_top #(
     wire        dac_sample_update_pulse;
     /* verilator lint_on UNUSEDSIGNAL */
 
+    wire [15:0] dac_pattern_ch0_code;
+    wire [15:0] dac_pattern_ch1_code;
+    wire [15:0] dac_pattern_ch2_code;
+    wire [15:0] dac_pattern_ch3_code;
+    wire [15:0] dac_plant_ch0_code;
+    wire [15:0] dac_plant_ch1_code;
+    wire [15:0] dac_plant_ch2_code;
+    wire [15:0] dac_plant_ch3_code;
     wire [15:0] dac_ch0_code;
     wire [15:0] dac_ch1_code;
     wire [15:0] dac_ch2_code;
     wire [15:0] dac_ch3_code;
+    wire [23:0] plant_encoder_word24;
+    wire [SPI_FRAME_BITS-1:0] spi_frame_data_mux;
+    wire plant_update;
+    wire plant_state_limit_latched;
+    wire signed [31:0] plant_iq_q16;
+    wire signed [31:0] plant_omega_q16;
     wire        dac_sample_ready;
     wire        dac_sample_valid;
     wire        dac_initialized;
@@ -137,7 +165,7 @@ module axu2cgb_hil_top #(
         .enc_a(core_enc_a), .enc_b(core_enc_b), .enc_z(core_enc_z),
         .encoder_position_edges(encoder_position_edges),
         .spi_sclk(spi_sclk_in), .spi_cs_n(spi_cs_n_in), .spi_mosi(spi_mosi_in),
-        .spi_frame_data(SPI_FRAME_DATA),
+        .spi_frame_data(spi_frame_data_mux),
         .spi_fault_flip_mask({SPI_FRAME_BITS{1'b0}}), .spi_fault_enable(1'b0),
         .spi_miso(core_spi_miso), .spi_frame_active(spi_frame_active),
         .spi_frame_done_pulse(spi_frame_done_pulse),
@@ -157,11 +185,70 @@ module axu2cgb_hil_top #(
         .deadtime_violation_latched(deadtime_violation_latched)
     );
 
+    assign plant_update = pwm_measurement_valid[0] &
+                          pwm_seen_latched & outputs_enabled;
+
+    pmsm_closed_loop_hil_q16 u_closed_loop_plant (
+        .clk(hil_clk), .rst_n(core_rst_n),
+        .clear_faults(clear_faults), .model_update(plant_update),
+        .pwm_period_ticks(pwm_period_ticks),
+        .pwm_high_ticks(pwm_high_ticks),
+        .pwm_valid(pwm_measurement_valid),
+        .vbus_q16(PLANT_VBUS_Q16),
+        .load_torque_q16(32'sd0),
+        .pole_pairs(PLANT_POLE_PAIRS),
+        .k_vd_q16(PLANT_K_VD_Q16), .k_vq_q16(PLANT_K_VQ_Q16),
+        .k_r_d_q16(PLANT_K_R_D_Q16), .k_r_q_q16(PLANT_K_R_Q_Q16),
+        .k_cross_d_q16(PLANT_K_CROSS_D_Q16),
+        .k_cross_q_q16(PLANT_K_CROSS_Q_Q16),
+        .k_flux_q16(PLANT_K_FLUX_Q16),
+        .k_torque_q16(PLANT_K_TORQUE_Q16),
+        .k_accel_q16(PLANT_K_ACCEL_Q16),
+        .k_damp_q16(PLANT_K_DAMP_Q16),
+        .k_theta_q16(PLANT_K_THETA_Q16),
+        .k_rad_to_turn_q32(PLANT_K_RAD_TO_TURN_Q32),
+        .current_gain_q16(32'sd52428800),
+        .current_offset_code(16'h547B),
+        .vbus_gain_q16(32'sd53673984),
+        .vbus_offset_code(16'd0),
+        .current_limit_q16(32'sd1638400),
+        .speed_limit_q16(32'sd65536000),
+        .duty_q16(), .vd_q16(), .vq_q16(), .id_q16(),
+        .iq_q16(plant_iq_q16), .torque_q16(),
+        .omega_m_q16(plant_omega_q16), .omega_e_q16(),
+        .ia_q16(), .ib_q16(), .ic_q16(),
+        .electrical_phase_q32(), .mechanical_phase_q32(),
+        .encoder_word24(plant_encoder_word24),
+        .dac_ia_code(dac_plant_ch0_code),
+        .dac_ib_code(dac_plant_ch1_code),
+        .dac_ic_code(dac_plant_ch2_code),
+        .dac_vbus_code(dac_plant_ch3_code),
+        .state_limit_latched(plant_state_limit_latched)
+    );
+
+    generate
+        if (SPI_FRAME_BITS == 24) begin : g_plant_spi_word
+            assign spi_frame_data_mux =
+                test_pattern_enable ? SPI_FRAME_DATA : plant_encoder_word24;
+        end else begin : g_static_spi_word
+            assign spi_frame_data_mux = SPI_FRAME_DATA;
+        end
+    endgenerate
+
     dac_eval_pattern_generator u_dac_pattern (
         .pattern_select(dac_pattern_select),
-        .ch0_code(dac_ch0_code), .ch1_code(dac_ch1_code),
-        .ch2_code(dac_ch2_code), .ch3_code(dac_ch3_code)
+        .ch0_code(dac_pattern_ch0_code), .ch1_code(dac_pattern_ch1_code),
+        .ch2_code(dac_pattern_ch2_code), .ch3_code(dac_pattern_ch3_code)
     );
+
+    assign dac_ch0_code = test_pattern_enable ?
+                          dac_pattern_ch0_code : dac_plant_ch0_code;
+    assign dac_ch1_code = test_pattern_enable ?
+                          dac_pattern_ch1_code : dac_plant_ch1_code;
+    assign dac_ch2_code = test_pattern_enable ?
+                          dac_pattern_ch2_code : dac_plant_ch2_code;
+    assign dac_ch3_code = test_pattern_enable ?
+                          dac_pattern_ch3_code : dac_plant_ch3_code;
 
     assign dac_sample_valid = dac_submit_pending & outputs_enabled;
 
@@ -178,6 +265,8 @@ module axu2cgb_hil_top #(
                 dac_pattern_seen <= dac_pattern_select;
                 dac_submit_pending <= 1'b1;
             end
+            if (plant_update && !test_pattern_enable)
+                dac_submit_pending <= 1'b1;
             if (outputs_enabled && !outputs_enabled_d)
                 dac_submit_pending <= 1'b1;
             if (dac_sample_valid && dac_sample_ready)
@@ -216,7 +305,8 @@ module axu2cgb_hil_top #(
     end
 
     assign fault_summary = (|shoot_through_latched) |
-                           (|deadtime_violation_latched);
+                           (|deadtime_violation_latched) |
+                           plant_state_limit_latched;
     assign enc_a_out    = outputs_enabled ? core_enc_a : 1'b0;
     assign enc_b_out    = outputs_enabled ? core_enc_b : 1'b0;
     assign enc_z_out    = outputs_enabled ? core_enc_z : 1'b0;
