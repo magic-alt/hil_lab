@@ -13,6 +13,7 @@ RTL_TIME := rtl/common/timebase/hil_timebase.v
 RTL_CAPTURE := rtl/capture/pwm_capture.v rtl/capture/pwm_complementary_monitor.v
 RTL_GENERATOR := rtl/generator/abz_encoder_emulator.v rtl/generator/spi_encoder_emulator.v
 RTL_SCENARIO := rtl/scenario/dio_event_scheduler.v rtl/scenario/hil_event_queue.v rtl/scenario/dio_scenario_engine.v rtl/scenario/trigger_engine.v rtl/scenario/digital_fault_injector.v
+RTL_CONTROL := rtl/control/hil_axi_event_fifo.v rtl/control/hil_axi_control_plane.v rtl/top/hil_axi_digital_core.v
 RTL_TOP := rtl/top/hil_digital_core.v
 RTL := $(RTL_COMMON) $(RTL_TIME) $(RTL_CAPTURE) $(RTL_GENERATOR) $(RTL_SCENARIO) $(RTL_TOP)
 
@@ -29,7 +30,7 @@ RTL_DAC := rtl/dac/dac_eval_pattern_generator.v rtl/dac/ad3542r_quad_stream.v
 AXU2CGB_RTL := boards/zu2cg/rtl/axu2cgb_clock_gen.v boards/zu2cg/rtl/axu2cgb_hil_top.v
 BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 
-.PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics \
+.PHONY: all verify policy compile lint test test-axi-control zynq-axi-check test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics \
 	dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
 	zynq7010-constraints zynq7010-compile zynq7010-test zynq7010-lint \
@@ -37,7 +38,7 @@ BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 
 all: verify
 
-verify: architecture host-test policy compile test lint dac-compile dac-test dac-pattern-test dac-lint \
+verify: architecture host-test policy compile test lint zynq-axi-check dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
 	zynq7010-constraints zynq7010-compile zynq7010-test zynq7010-lint \
 	bbb-check mcu-pwm-check
@@ -60,7 +61,15 @@ compile: $(BUILD_DIR)
 lint:
 	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module hil_digital_core $(RTL)
 
-test: test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics
+test: test-axi-control test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics
+
+test-axi-control: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_hil_axi_control_plane.vvp rtl/control/hil_axi_event_fifo.v rtl/control/hil_axi_control_plane.v sim/tb_hil_axi_control_plane.v
+	$(VVP) $(BUILD_DIR)/tb_hil_axi_control_plane.vvp
+	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module hil_axi_digital_core $(RTL_COMMON) $(RTL_TIME) $(RTL_CAPTURE) $(RTL_GENERATOR) rtl/scenario/dio_event_scheduler.v $(RTL_CONTROL)
+
+zynq-axi-check:
+	$(PYTHON) tools/zynq_axi_static_check.py
 
 test-pwm: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pwm_capture.vvp $(RTL_COMMON) $(RTL_TIME) rtl/capture/pwm_capture.v sim/tb_pwm_capture.v

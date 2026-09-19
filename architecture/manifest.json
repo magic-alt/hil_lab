@@ -35,7 +35,11 @@
     "boards/zybo",
     "host/hil/backends",
     "fieldbus",
-    "fieldbus/ethercat"
+    "fieldbus/ethercat",
+    "rtl/control",
+    "host/hil/transports",
+    "boards/zynq7010/linux",
+    "boards/zu2cg/linux"
   ],
   "board_roles": {
     "boards/zu2cg": "full_hil_backend",

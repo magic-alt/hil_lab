@@ -222,3 +222,8 @@ Track D coordinates the bench; it does not replace PL/PRU deterministic timing.
 ### Linux Controller v1
 
 Track D now has dependency-light controller foundations: environment/tool probing, IgH/SOEM diagnostic adapters, stdlib SocketCAN, CANopen NMT/heartbeat primitives and exclusive bench resource locking. These are control-plane capabilities only. Real-time EtherCAT cycle/DC/WKC measurements and full CANopen CiA402 remain physical D1 qualification work.
+
+
+### Zynq PS/PL AXI control plane
+
+C5/G0 now share a frozen 4 KiB AXI4-Lite register ABI with fail-safe control, PWM snapshots, dynamic ABZ configuration and a timestamped BRAM-backed event FIFO. Linux uses the real `/dev/uioN` mmap transport in `host.hil.transports.ZynqUioTransport`. See `docs/zynq-axi-control-plane.md`.
