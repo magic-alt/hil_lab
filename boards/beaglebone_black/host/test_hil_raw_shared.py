@@ -94,6 +94,19 @@ class RawCaptureTests(unittest.TestCase):
         self.assertEqual(pair["overlap_count"], 0)
         self.assertEqual(pair["min_deadtime_violation_count"], 0)
 
+        self.assertEqual(
+            uh["period_us"]["tick_histogram"],
+            [{"ticks": 10000, "count": 4, "value_us": 50.0}],
+        )
+        self.assertEqual(
+            pair["deadtime_high_to_low_ns"]["tick_histogram"],
+            [{"ticks": 140, "count": 5, "value_ns": 700.0}],
+        )
+        self.assertEqual(
+            pair["deadtime_low_to_high_ns"]["tick_histogram"],
+            [{"ticks": 140, "count": 5, "value_ns": 700.0}],
+        )
+
     def test_analyzer_latches_short_deadtime_in_host(self) -> None:
         shared = self.make_capture()
         # Change one low-side rise from +140 ticks to +80 ticks.
@@ -103,6 +116,14 @@ class RawCaptureTests(unittest.TestCase):
         self.assertEqual(
             result["pairs"]["U"]["min_deadtime_violation_count"],
             1,
+        )
+
+        self.assertEqual(
+            result["pairs"]["U"]["deadtime_high_to_low_ns"]["tick_histogram"],
+            [
+                {"ticks": 80, "count": 1, "value_ns": 400.0},
+                {"ticks": 140, "count": 4, "value_ns": 700.0},
+            ],
         )
 
 
