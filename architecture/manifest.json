@@ -70,7 +70,6 @@
     "ros2_optional"
   ],
   "legacy_rtl_mapping": {
-    "rtl/motor": "rtl/plant",
     "rtl/dac": "board/interface analog I/O"
   },
   "forbidden_paths": [
@@ -81,6 +80,7 @@
     "rtl/encoder/ssi_encoder_master_capture.v",
     "rtl/pwm",
     "rtl/encoder",
-    "rtl/io"
+    "rtl/io",
+    "rtl/motor"
   ]
 }
