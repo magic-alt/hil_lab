@@ -58,12 +58,12 @@ def main() -> int:
     dump = sub.add_parser("dump")
     dump.add_argument("--limit", type=int, default=32)
 
-    analyze = sub.add_parser("analyze")
+    analyze = sub.add_parser("analyze", help="offline timing analysis with tick histograms")
     analyze.add_argument("--min-deadtime-ns", type=float, default=0.0)
 
     capture = sub.add_parser(
         "capture",
-        help="configure/start bounded capture, wait without RPMsg, then analyze",
+        help="bounded precision capture plus offline statistics/tick histograms",
     )
     capture.add_argument("--event-limit", type=int, default=RAW_CAPACITY)
     capture.add_argument(
