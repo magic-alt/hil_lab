@@ -63,6 +63,7 @@ def main() -> int:
 
     require(makefile, r"hil_b2_serial_pru1\.out", "serial PRU1 firmware target", errors)
     require(makefile, r"-O3", "optimized serial PRU build", errors)
+    require(makefile, r"--stack_size=0x400", "qualified 1 KiB serial PRU1 stack budget", errors)
 
     for pattern, label in [
         (r"config-pin P8_45 pruin", "SSI/BiSS clock input pinmux"),
