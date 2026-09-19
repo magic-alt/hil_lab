@@ -106,8 +106,8 @@ def main() -> int:
 
     for pattern, label in [
         (r"HIL_PLL_SYSCLK_HZ\s+\(180000000UL\)", "180 MHz PLL SYSCLK"),
-        (r"HIL_HSI_HZ\s+\(16000000UL\)", "16 MHz HSI fallback"),
-        (r"HIL_HSE_MCO_HZ\s+\(8000000UL\)", "8 MHz DISC1 MCO reference"),
+        (r"HIL_HSI_HZ\s+\(16000000UL\)", "16 MHz reset HSI"),
+        (r"HIL_HSE_XTAL_HZ\s+\(8000000UL\)", "8 MHz E01 X3 crystal reference"),
         (r"PWM_FREQUENCY_HZ\s+\(20000UL\)", "20 kHz default PWM"),
         (r"PWM_DUTY_PERMILLE\s+\(500UL\)", "50% default duty"),
         (r"PWM_DEADTIME_NS\s+\(700UL\)", "700 ns default dead-time"),
@@ -136,14 +136,14 @@ def main() -> int:
         (r"TIM8_BDTR\s*=\s*\(dtg & 0xFFUL\) \| TIM_BDTR_MOE", "DTG/MOE programming"),
         (r"RCC_PLLCFGR\s*=", "PLL configuration"),
         (r"360UL << 6", "PLLN 360"),
-        (r"pll_m = 8UL", "HSE-MCO PLLM=8"),
-        (r"pll_m = 16UL", "HSI PLLM=16"),
+        (r"\(8UL << 0\)", "HSE crystal PLLM=8"),
         (r"RCC_CFGR_PPRE2_DIV2", "APB2 divider 2"),
-        (r"CLOCK_SOURCE_HSE_PLL", "HSE-MCO clock source state"),
-        (r"CLOCK_SOURCE_HSI_PLL", "HSI PLL fallback state"),
-        (r"CLOCK_SOURCE_HSI_DIRECT", "direct HSI emergency state"),
-        (r"wait_rcc_cr_set\(RCC_CR_HSERDY\)", "optional HSE readiness test"),
-        (r"g_clock_fault_flags \|= CLOCK_FAULT_HSE_TIMEOUT", "non-fatal HSE timeout"),
+        (r"RCC_CR &= ~RCC_CR_HSEBYP", "HSE crystal non-bypass mode"),
+        (r"wait_rcc_cr_clear\(RCC_CR_HSERDY\)", "HSE disabled before bypass change"),
+        (r"RCC_PLLCFGR_PLLSRC_HSE", "PLL source HSE"),
+        (r"CLOCK_SOURCE_HSE_XTAL_PLL", "HSE crystal clock source state"),
+        (r"wait_rcc_cr_set\(RCC_CR_HSERDY\)", "required HSE readiness test"),
+        (r"g_clock_fault_flags \|= CLOCK_FAULT_HSE_TIMEOUT", "HSE timeout fault latch"),
         (r"deadtime_ns_to_dtg\(PWM_DEADTIME_NS, timer_clock_hz\)", "runtime dead-time clock"),
         (r"g_pwm_deadtime_actual_ns", "quantized dead-time diagnostic"),
         (r"g_boot_stage", "boot-stage diagnostic"),
@@ -153,11 +153,13 @@ def main() -> int:
         require(source, pattern, label, errors)
 
     forbid(source, r"stm32f4xx_hal|HAL_", "STM32Cube HAL dependency", errors)
+    forbid(source, r"RCC_CR\s*\|=\s*RCC_CR_HSEBYP", "HSE bypass mode on E01 crystal reference", errors)
+    forbid(source, r"CLOCK_SOURCE_HSI_PLL|use_direct_hsi:", "HSI timing fallback", errors)
     require(regs, r"TIM8_BASE\s+0x40010400UL", "TIM8 register base", errors)
     require(regs, r"RCC_CR_HSION\s+\(1UL << 0\)", "HSI enable bit", errors)
     require(regs, r"RCC_CR_HSIRDY\s+\(1UL << 1\)", "HSI ready bit", errors)
     require(system, r"SystemCoreClock\s*=\s*180000000UL", "180 MHz PLL system core update", errors)
-    require(system, r"SystemCoreClock\s*=\s*16000000UL", "16 MHz HSI system core fallback", errors)
+    require(system, r"SystemCoreClock\s*=\s*16000000UL", "16 MHz reset SystemCoreClock", errors)
     require(startup, r"Reset_Handler", "MDK reset handler", errors)
     require(startup, r"IMPORT\s+SystemInit", "startup SystemInit import", errors)
 
@@ -256,6 +258,10 @@ def main() -> int:
     require(readme, r"P9_29", "BBB UH destination", errors)
     require(readme, r"P9_30", "BBB UL destination", errors)
     require(readme, r"build_all\.bat", "Keil batch-build documentation", errors)
+    require(readme, r"MB1075-F429I-E01", "qualified PCB revision", errors)
+    require(readme, r"X3 8 MHz", "E01 crystal reference", errors)
+    require(readme, r"HSEBYP\s*=\s*0", "crystal-mode HSE documentation", errors)
+    require(readme, r"HSI fallback is not accepted", "fail-closed timing qualification policy", errors)
     forbid(PROJECT.read_text(encoding="utf-8"), r"ST-LINKIII-KEIL_SWO\.dll", "hard-coded ST-Link debugger DLL", errors)
     require(flash_bat, r"STM32_Programmer_CLI\.exe", "STM32CubeProgrammer flash helper", errors)
     require(flash_bat, r"-c port=SWD -w", "SWD flash command", errors)
@@ -277,7 +283,7 @@ def main() -> int:
     print("  linker: explicit stm32f429_flash.sct (Flash RO + SRAM RW/ZI)")
     print("  targets:", ", ".join(EXPECTED_TARGETS))
     print("  nominal PLL mode: 20 kHz -> ARR=8999, CCR1=4500")
-    print("  clock startup: HSE-MCO -> HSI-PLL -> direct-HSI fallback")
+    print("  clock reference: MB1075-F429I-E01 X3 8 MHz -> HSE PLL -> TIM8 180 MHz")
     print("  dead-time: 600ns=0x6c, 700ns=0x7e, 800ns=0x88")
     return 0
 

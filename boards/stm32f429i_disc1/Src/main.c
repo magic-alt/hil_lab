@@ -5,9 +5,8 @@
 
 extern uint32_t SystemCoreClock;
 
-#define CLOCK_SOURCE_HSE_PLL    (1UL)
-#define CLOCK_SOURCE_HSI_PLL    (2UL)
-#define CLOCK_SOURCE_HSI_DIRECT (3UL)
+#define CLOCK_SOURCE_NONE          (0UL)
+#define CLOCK_SOURCE_HSE_XTAL_PLL  (1UL)
 
 #define CLOCK_FAULT_HSI_TIMEOUT    (1UL << 0)
 #define CLOCK_FAULT_HSE_TIMEOUT    (1UL << 1)
@@ -58,6 +57,16 @@ static uint32_t wait_rcc_cr_set(uint32_t mask)
     return ((RCC_CR & mask) != 0UL) ? 1UL : 0UL;
 }
 
+static uint32_t wait_rcc_cr_clear(uint32_t mask)
+{
+    uint32_t timeout = CLOCK_WAIT_LOOPS;
+
+    while (((RCC_CR & mask) != 0UL) && (timeout-- != 0UL)) {
+    }
+
+    return ((RCC_CR & mask) == 0UL) ? 1UL : 0UL;
+}
+
 static uint32_t wait_pwr_csr_set(uint32_t mask)
 {
     uint32_t timeout = CLOCK_WAIT_LOOPS;
@@ -77,17 +86,6 @@ static uint32_t wait_sysclk_pll(void)
     }
 
     return ((RCC_CFGR & RCC_CFGR_SWS_MASK) == RCC_CFGR_SWS_PLL) ? 1UL : 0UL;
-}
-
-static uint32_t wait_sysclk_hsi(void)
-{
-    uint32_t timeout = CLOCK_WAIT_LOOPS;
-
-    while (((RCC_CFGR & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_HSI) &&
-           (timeout-- != 0UL)) {
-    }
-
-    return ((RCC_CFGR & RCC_CFGR_SWS_MASK) == RCC_CFGR_SWS_HSI) ? 1UL : 0UL;
 }
 
 /*
@@ -171,12 +169,12 @@ int main(void)
     tim8_pwm_init(g_tim8_clock_hz);
     g_boot_stage = 5UL;
 
-    /* Green = PWM active. Red remains on only when external HSE-MCO was lost. */
+    /* Green = qualified X3/HSE PWM active; red stays off only on that path. */
     GPIO_ODR(GPIOG_BASE) |= (1UL << 13);
-    if (g_clock_source == CLOCK_SOURCE_HSE_PLL) {
+    if (g_clock_source == CLOCK_SOURCE_HSE_XTAL_PLL) {
         GPIO_ODR(GPIOG_BASE) &= ~(1UL << 14);
     } else {
-        GPIO_ODR(GPIOG_BASE) |= (1UL << 14);
+        fail_stop();
     }
 
     for (;;) {
@@ -207,16 +205,13 @@ static void status_gpio_init(void)
 
 static uint32_t clock_init(void)
 {
-    uint32_t pll_m;
-    uint32_t use_hse;
-
     g_clock_fault_flags = 0UL;
-    g_clock_source = CLOCK_SOURCE_HSI_DIRECT;
+    g_clock_source = CLOCK_SOURCE_NONE;
     g_sysclk_hz = HIL_HSI_HZ;
 
     /*
-     * HSI is the guaranteed reset clock. Keep it enabled as the recovery path
-     * even when the preferred ST-LINK MCO/HSE input is available.
+     * Reset starts from HSI. Keep it enabled as the boot clock while the
+     * MB1075-F429I-E01 board's X3 8 MHz crystal is qualified.
      */
     RCC_CR |= RCC_CR_HSION;
     if (wait_rcc_cr_set(RCC_CR_HSIRDY) == 0UL) {
@@ -236,55 +231,54 @@ static uint32_t clock_init(void)
         FLASH_ACR_DCEN;
 
     /*
-     * Preferred clock:
-     * STM32F429I-DISC1 factory routing can supply fixed 8 MHz ST-LINK MCO to
-     * PH0/OSC_IN. A modified board may not have that solder-bridge route, so
-     * HSE readiness is optional rather than a fatal boot condition.
+     * Timing qualification reference:
+     * MB1075-F429I-E01 uses the onboard X3 8 MHz crystal on PH0/PH1.
+     * HSEBYP must be 0 for crystal/ceramic-resonator mode. A missing HSE is a
+     * hard failure: silently falling back to HSI would invalidate PWM period
+     * and dead-time measurements.
      */
     RCC_CR &= ~RCC_CR_HSEON;
-    RCC_CR |= RCC_CR_HSEBYP;
-    RCC_CR |= RCC_CR_HSEON;
-
-    use_hse = wait_rcc_cr_set(RCC_CR_HSERDY);
-    if (use_hse != 0UL) {
-        pll_m = 8UL;
-        g_clock_source = CLOCK_SOURCE_HSE_PLL;
-    } else {
-        pll_m = 16UL;
-        g_clock_source = CLOCK_SOURCE_HSI_PLL;
+    if (wait_rcc_cr_clear(RCC_CR_HSERDY) == 0UL) {
         g_clock_fault_flags |= CLOCK_FAULT_HSE_TIMEOUT;
+        fail_stop();
+    }
+
+    RCC_CR &= ~RCC_CR_HSEBYP;
+    RCC_CR |= RCC_CR_HSEON;
+    if (wait_rcc_cr_set(RCC_CR_HSERDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_HSE_TIMEOUT;
+        fail_stop();
     }
 
     RCC_CR &= ~RCC_CR_PLLON;
-    {
-        uint32_t timeout = CLOCK_WAIT_LOOPS;
-        while (((RCC_CR & RCC_CR_PLLRDY) != 0UL) && (timeout-- != 0UL)) {
-        }
+    if (wait_rcc_cr_clear(RCC_CR_PLLRDY) == 0UL) {
+        g_clock_fault_flags |= CLOCK_FAULT_PLL_TIMEOUT;
+        fail_stop();
     }
 
     RCC_PLLCFGR =
-        (pll_m << 0) |
+        (8UL << 0) |
         (360UL << 6) |
         (0UL << 16) |
-        ((use_hse != 0UL) ? RCC_PLLCFGR_PLLSRC_HSE : 0UL) |
+        RCC_PLLCFGR_PLLSRC_HSE |
         (7UL << 24);
 
     RCC_CR |= RCC_CR_PLLON;
     if (wait_rcc_cr_set(RCC_CR_PLLRDY) == 0UL) {
         g_clock_fault_flags |= CLOCK_FAULT_PLL_TIMEOUT;
-        goto use_direct_hsi;
+        fail_stop();
     }
 
     PWR_CR |= PWR_CR_ODEN;
     if (wait_pwr_csr_set(PWR_CSR_ODRDY) == 0UL) {
         g_clock_fault_flags |= CLOCK_FAULT_OD_TIMEOUT;
-        goto use_direct_hsi;
+        fail_stop();
     }
 
     PWR_CR |= PWR_CR_ODSWEN;
     if (wait_pwr_csr_set(PWR_CSR_ODSWRDY) == 0UL) {
         g_clock_fault_flags |= CLOCK_FAULT_ODSW_TIMEOUT;
-        goto use_direct_hsi;
+        fail_stop();
     }
 
     RCC_CFGR =
@@ -299,35 +293,19 @@ static uint32_t clock_init(void)
 
     if (wait_sysclk_pll() == 0UL) {
         g_clock_fault_flags |= CLOCK_FAULT_SWITCH_TIMEOUT;
-        goto use_direct_hsi;
+        fail_stop();
     }
 
     SystemCoreClock = HIL_PLL_SYSCLK_HZ;
     g_sysclk_hz = HIL_PLL_SYSCLK_HZ;
+    g_clock_source = CLOCK_SOURCE_HSE_XTAL_PLL;
 
     /*
-     * APB2 is SYSCLK/2, and STM32F4 timer clocks are doubled when APB
-     * prescaler is greater than 1. Therefore TIM8 runs at SYSCLK = 180 MHz.
+     * APB2 is SYSCLK/2, and STM32F4 timer clocks double APB clocks when the
+     * APB prescaler is greater than 1. TIM8 is therefore referenced to the
+     * 180 MHz HSE-derived PLL clock tree.
      */
     return HIL_PLL_SYSCLK_HZ;
-
-use_direct_hsi:
-    /*
-     * Last-resort functional mode. This still produces 20 kHz PWM, but
-     * dead-time resolution becomes 62.5 ns and HSI absolute accuracy applies.
-     */
-    RCC_CFGR &=
-        ~(RCC_CFGR_SW_MASK |
-          RCC_CFGR_HPRE_MASK |
-          RCC_CFGR_PPRE1_MASK |
-          RCC_CFGR_PPRE2_MASK);
-    (void)wait_sysclk_hsi();
-    RCC_CR &= ~RCC_CR_PLLON;
-
-    g_clock_source = CLOCK_SOURCE_HSI_DIRECT;
-    SystemCoreClock = HIL_HSI_HZ;
-    g_sysclk_hz = HIL_HSI_HZ;
-    return HIL_HSI_HZ;
 }
 
 static void pwm_gpio_init(void)

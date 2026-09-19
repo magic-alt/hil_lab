@@ -5,6 +5,24 @@ stimulus source for BeagleBone Black B1 (#12).
 
 PlatformIO is intentionally not used.
 
+## Qualified reference hardware
+
+B1 timing qualification is pinned to the following physical reference source:
+
+```text
+board       = STM32F429I-DISC1
+PCB         = MB1075-F429I-E01
+oscillator  = X3 8 MHz crystal / ceramic resonator
+HSE mode    = crystal oscillator
+HSEBYP      = 0
+```
+
+The E01 reference build is deliberately fail-closed. HSI may be used as the
+reset/boot clock while HSE starts, but **HSI fallback is not accepted** for B1
+period/dead-time qualification because its RC frequency tolerance would silently
+move the generated PWM timing.
+
+
 ## Project
 
 Open:
@@ -143,41 +161,54 @@ PC6 is also connected to the onboard LCD HSYNC input. This project does not
 initialize LTDC, so there is no MCU output conflict; the onboard display may
 show invalid content while PC6 is used as PWM.
 
-## Clock tree and startup fallback
+## Reference clock tree
 
-STM32F429I-DISC1 factory routing can provide an 8 MHz ST-LINK MCO clock on
-PH0/OSC_IN. That route depends on the board solder-bridge configuration, so the
-PWM stimulus no longer treats HSE-MCO as mandatory.
-
-Startup order is:
+The qualified `MB1075-F429I-E01` board uses its onboard **X3 8 MHz crystal**
+on PH0/OSC_IN and PH1/OSC_OUT. Firmware therefore configures the STM32 HSE
+oscillator in crystal/resonator mode:
 
 ```text
-1. HSI 16 MHz is enabled and kept alive as the recovery clock.
-2. Try ST-LINK MCO / HSE bypass at 8 MHz.
-3. If HSE is ready:
-      HSE 8 MHz -> PLLM=8, PLLN=360, PLLP=2 -> 180 MHz
-4. If HSE is not ready:
-      HSI 16 MHz -> PLLM=16, PLLN=360, PLLP=2 -> 180 MHz
-5. If PLL/OverDrive switching also fails:
-      remain on direct HSI 16 MHz
+RCC_CR.HSEBYP = 0
+RCC_CR.HSEON  = 1
 ```
 
-In either PLL mode:
+The timing-reference clock tree is fixed:
 
 ```text
-SYSCLK          = 180 MHz
-AHB             = 180 MHz
-APB1            = 45 MHz
-APB2            = 90 MHz
-TIM8            = 180 MHz
+X3 8 MHz
+  -> PLLM = 8
+  -> PLLN = 360
+  -> PLLP = 2
+  -> SYSCLK = 180 MHz
+  -> AHB = 180 MHz
+  -> APB1 = 45 MHz
+  -> APB2 = 90 MHz
+  -> TIM8 = 180 MHz
 ```
 
-The emergency direct-HSI path still generates 20 kHz PWM, but TIM8 then runs at
-16 MHz, dead-time resolution is 62.5 ns, and HSI absolute-frequency tolerance
-applies. Use it as a functional fallback, not as the final timing reference.
+Startup is fail-closed for timing qualification:
 
-TIM8 `ARR`, `CCR1`, and dead-time are calculated from the **actual selected
-timer clock at runtime**, so the firmware no longer silently assumes 180 MHz.
+```text
+reset on HSI
+  -> disable HSE and wait HSERDY clear
+  -> HSEBYP=0
+  -> start X3 HSE and require HSERDY
+  -> start HSE-sourced PLL and require PLLRDY
+  -> enable OverDrive and switch SYSCLK to PLL
+  -> start TIM8
+
+any HSE / PLL / OverDrive / clock-switch failure
+  -> fail_stop()
+  -> PWM disabled
+  -> LD4 red ON
+```
+
+There is intentionally no HSI->PLL or direct-HSI timing fallback. A reference
+source that continues producing apparently valid PWM at an unqualified RC-clock
+frequency is more dangerous to HIL measurement quality than a hard failure.
+
+TIM8 `ARR`, `CCR1`, and dead-time are calculated from the qualified 180 MHz
+timer clock.
 
 ## Build and flash
 
@@ -334,9 +365,8 @@ SystemCoreClock
 Clock source values:
 
 ```text
-1 = HSE-MCO -> PLL 180 MHz
-2 = HSI     -> PLL 180 MHz
-3 = direct HSI 16 MHz fallback
+0 = clock reference not yet qualified
+1 = E01 X3 8 MHz HSE crystal -> PLL 180 MHz
 ```
 
 Boot stage:
@@ -352,9 +382,8 @@ Boot stage:
 LED diagnostics:
 
 ```text
-LD3 green ON, LD4 red OFF -> PWM active, preferred HSE-MCO PLL path
-LD3 green ON, LD4 red ON  -> PWM active, HSI fallback path
-LD3 green OFF, LD4 red ON -> boot/init failure before PWM activation
+LD3 green ON,  LD4 red OFF -> qualified X3/HSE/PLL PWM active
+LD3 green OFF, LD4 red ON  -> clock/init failure; PWM is not qualified
 ```
 
 This is useful when PC6/PA5 appear static: if green never turns on, debug the

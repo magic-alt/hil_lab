@@ -13,8 +13,8 @@ void SystemInit(void)
     SCB_VTOR = 0x08000000UL;
 
     /*
-     * After reset STM32F429 runs from HSI. main() owns the final clock-tree
-     * selection and may use HSE-MCO->PLL, HSI->PLL, or direct HSI fallback.
+     * After reset STM32F429 runs from HSI. main() then requires the
+     * MB1075-F429I-E01 X3 8 MHz HSE crystal and switches to HSE->PLL.
      */
     SystemCoreClock = 16000000UL;
 }

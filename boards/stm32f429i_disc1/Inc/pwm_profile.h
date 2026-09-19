@@ -21,7 +21,7 @@
 
 #define HIL_PLL_SYSCLK_HZ     (180000000UL)
 #define HIL_HSI_HZ            (16000000UL)
-#define HIL_HSE_MCO_HZ        (8000000UL)
+#define HIL_HSE_XTAL_HZ       (8000000UL)
 
 #if PWM_FREQUENCY_HZ == 0
 #error "PWM_FREQUENCY_HZ must be > 0"
