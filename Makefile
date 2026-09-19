@@ -66,7 +66,7 @@ test: test-axi-control test-pwm test-deadtime test-abz test-spi test-event test-
 test-axi-control: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_hil_axi_control_plane.vvp rtl/control/hil_axi_event_fifo.v rtl/control/hil_axi_control_plane.v sim/tb_hil_axi_control_plane.v
 	$(VVP) $(BUILD_DIR)/tb_hil_axi_control_plane.vvp
-	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module hil_axi_digital_core $(RTL_COMMON) $(RTL_TIME) $(RTL_CAPTURE) $(RTL_GENERATOR) rtl/scenario/dio_event_scheduler.v $(RTL_CONTROL)
+	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module hil_axi_digital_core $(RTL_COMMON) $(RTL_TIME) $(RTL_CAPTURE) $(RTL_GENERATOR) rtl/scenario/dio_event_scheduler.v $(RTL_TOP) $(RTL_CONTROL)
 
 zynq-axi-check:
 	$(PYTHON) tools/zynq_axi_static_check.py
