@@ -1,148 +1,95 @@
 # HIL Backend Contract
 
-This document defines backend-neutral semantics for host software and pytest.
+This contract defines backend-neutral semantics used by host software and pytest.
 
-It is intentionally smaller than any one hardware backend.
+## Core rules
 
-## Design principles
-
-1. Tests declare required capabilities.
-2. Backends expose hardware time explicitly.
-3. Deterministic operations execute in FPGA PL or PRU, not Linux timing loops.
+1. Tests request capabilities rather than board models.
+2. Deterministic behavior executes in FPGA PL or PRU.
+3. Raw hardware timestamps remain available.
 4. Unsupported capabilities are explicit.
-5. Safe-state behavior is part of the contract.
-6. Raw measurement evidence is retained alongside converted engineering units.
+5. Safe state is a backend-local requirement.
+6. Infrastructure failure is distinct from DUT failure.
 
-## Required backend metadata
+The executable contract starts in host/hil/core.py. architecture/manifest.json is the machine-readable registry checked by CI.
 
-Every backend should expose:
+## Required backend identity
 
-- backend type: e.g. `zynq_axu2cgb`, `zynq7010_ax7010` or `bbb_pru`;
-- hardware revision;
-- FPGA bitstream / PRU firmware revision;
-- protocol/API version;
+Every deterministic backend reports:
+
+- backend_type;
+- hardware_revision;
+- firmware_revision / bitstream revision;
+- api_version;
 - capability set;
-- timestamp frequency;
-- timestamp counter width;
+- tick_hz;
+- counter_bits;
 - health/error counters.
 
-## Initial capabilities
+Every backend must provide timebase and force_safe.
 
-Suggested capability identifiers:
+## Capability registry
 
-- `timebase`
-- `pwm_capture`
-- `pwm_generator`
-- `pwm_complementary_monitor`
-- `abz_generator`
-- `abz_capture`
-- `ssi_sensor_emulator`
-- `ssi_sensor_capture`
-- `spi_sensor_emulator`
-- `dio_scheduler`
-- `pmsm_plant_lite`
-- `dac_feedback`
-- `pmsm_plant`
+Initial Architecture v2 capabilities:
 
-Names may evolve before B4 freezes the Python API, but tests must not branch on board model where a capability check is sufficient.
+- timebase
+- force_safe
+- pwm_capture
+- pwm_generator
+- pwm_complementary_monitor
+- abz_generator
+- abz_capture
+- ssi_sensor_emulator
+- ssi_sensor_capture
+- biss_sensor_emulator
+- spi_sensor_emulator
+- dio_scheduler
+- fault_injection
+- dac_feedback
+- pmsm_plant_lite
+- pmsm_plant
+- dual_inertia_plant
+
+A capability name may be added only with defined semantics and a conformance test path. Plain SSI must not be reported as BiSS-C.
 
 ## Timestamp semantics
 
-A hardware timestamp is represented by:
+A Timestamp contains ticks, tick_hz and counter_bits.
 
-```text
-ticks
-tick_hz
-counter_bits
-```
+seconds = ticks / tick_hz is a host conversion only. Rollover must be handled explicitly by the transport/backend and never hidden as ambiguous wall-clock time.
 
-Host conversion:
+## PWM measurement
 
-```text
-seconds = ticks / tick_hz
-```
+pwm_capture results identify channel, measurement sequence, period/high/low ticks and validity/overflow state. Implementations may expose additional edge timestamps.
 
-Rollover handling must be explicit. Backends must not silently convert a wrapping hardware counter into ambiguous host wall-clock time.
+pwm_complementary_monitor additionally reports both dead-time directions plus overlap/minimum-dead-time fault state.
 
-## PWM measurement semantics
+## ABZ
 
-Where `pwm_capture` is supported, a sample should identify:
+abz_generator configuration includes enable, transition period, direction, initial state, index behavior and acknowledged/apply timing. Electrical voltage and differential signaling belong to the adapter, not this API.
 
-- channel;
-- measurement sequence;
-- rising/falling edge timestamp where available;
-- period ticks;
-- high ticks;
-- low ticks;
-- validity/overflow flags.
+## Deterministic events
 
-Where `pwm_complementary_monitor` is supported, results additionally expose:
+dio_scheduler accepts an event id, target hardware timestamp, mask and value. Evidence should retain requested and actual apply timestamps plus late/overflow/error flags when implemented.
 
-- high->low dead-time ticks;
-- low->high dead-time ticks;
-- overlap/shoot-through-command latch;
-- minimum-dead-time violation latch.
+## Scenario contract
 
-## ABZ generator semantics
+host/hil/scenario.py provides the first versioned scenario parser. A scenario declares required_capabilities and ordered at_ticks actions.
 
-Where `abz_generator` is supported, configuration should cover:
+The host validates the capability set first. Backend-specific executors may reject an action that exceeds queue depth/rate/timing limits. Linux must not emulate a rejected real-time action with sleeps.
 
-- enable;
-- transition/step period;
-- direction;
-- initial phase/state;
-- index interval;
-- index width;
-- apply timestamp or acknowledged activation timestamp.
+## Controller services are not backend capabilities
 
-Electrical voltage/differential signaling is not part of this logical contract.
-
-## Deterministic DIO scheduler
-
-Where `dio_scheduler` is supported, an event contains:
-
-- requested hardware timestamp;
-- output mask;
-- output value;
-- event identifier.
-
-Execution evidence should retain:
-
-- requested timestamp;
-- actual timestamp;
-- resulting state;
-- late/overflow/error flags.
-
-## Safe-state semantics
-
-Every backend must support a local `force_safe` or equivalent operation and define what happens on:
-
-- host disconnect;
-- backend firmware stop/reset;
-- board reset;
-- watchdog expiry.
-
-Potentially active stimulus must not depend on Linux cleanup code to become safe.
+Raspberry Pi services such as IgH, SOEM, SocketCAN, CANopen, labgrid and optional ROS2 are controller services. They are intentionally not mixed into the deterministic backend capability enum.
 
 ## Error model
 
-Host code should distinguish:
+Host code distinguishes:
 
-- unsupported capability;
-- invalid configuration;
-- backend/transport infrastructure failure;
-- measurement overflow/data loss;
-- DUT test failure.
+- UnsupportedCapability;
+- InvalidConfiguration;
+- InfrastructureError;
+- backend overflow/data loss;
+- DUT assertion failure.
 
-This distinction is required before unattended G5 Servo CI is considered complete.
-
-
-## FPGA-Lite capability boundary
-
-The Zynq-7010/AX7010 backend may expose `pmsm_plant_lite` separately from
-the ZU2CG `pmsm_plant` capability. Tests must not assume those models have
-the same numerical fidelity, analog-I/O bandwidth or multi-axis capacity.
-
-Encoder protocols are also capability-specific. Plain SSI support must not be
-reported as BiSS-C support unless BiSS framing, CRC and timing semantics are
-implemented and qualified.
+G5/D2 unattended Servo CI must preserve this distinction in reports and cleanup.

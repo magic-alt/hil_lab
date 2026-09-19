@@ -1,12 +1,13 @@
 # Servo HIL Roadmap
 
-`hil_lab` uses three parallel development tracks with different responsibilities.
+`hil_lab` uses four cooperating development tracks with different responsibilities.
 
 - **Track A (G-series): ZU2CG / AXU2CGB Full HIL** is the primary product path.
 - **Track B (B-series): BeagleBone Black / PRU Digital HIL** is a companion path for rapid deterministic digital testing.
 - **Track C (C-series): Zynq-7010 / AX7010 FPGA-Lite HIL** is a low-cost parallel-FPGA path for signal generation/capture and a resource-bounded single-motor plant.
+- **Track D (D-series): Raspberry Pi HIL Controller** owns Linux orchestration, fieldbus, DUT lifecycle and test evidence; it is not a deterministic edge-generation backend.
 
-Tracks B/C accelerate firmware validation but do not replace Track A analog/multi-axis/joint-model work.
+Tracks B/C accelerate deterministic firmware validation without replacing Track A analog/multi-axis/joint-model work. Track D coordinates the bench and fieldbus services without replacing any real-time backend.
 
 # Track A — ZU2CG / AXU2CGB Full HIL
 
@@ -303,16 +304,66 @@ Scope:
 Zybo(7010) becomes a secondary constraints target after the AX7010 electrical
 and timing baseline is qualified.
 
+
+# Track D — Raspberry Pi HIL Controller
+
+## D0 — controller baseline (#47)
+
+**Goal:** establish Raspberry Pi 4/5 as the reproducible Linux control plane.
+
+Scope:
+
+- supported OS/kernel image and service lifecycle;
+- optional PREEMPT_RT with measured cyclictest evidence;
+- stable NIC/CAN ownership;
+- common host.hil API access;
+- host health/logging and recovery;
+- explicit separation between host clock correlation and backend hardware timestamps.
+
+## D1 — fieldbus controller (#48)
+
+**Goal:** make fieldbus communication a first-class HIL service.
+
+EtherCAT:
+
+- IgH for the long-running real-time master path;
+- SOEM for discovery, diagnostics and focused test utilities;
+- WKC/DC/cycle-jitter evidence;
+- CiA402 CSP/CSV/CST smoke/regression.
+
+CAN/CANopen:
+
+- SocketCAN and vcan CI;
+- NMT/heartbeat/SDO/PDO regression;
+- CiA402-over-CANopen where supported;
+- communication-loss/recovery scenarios.
+
+## D2 — lab orchestration (#49)
+
+**Goal:** make a bench allocatable and unattended.
+
+- labgrid resource/exporter/coordinator model;
+- pytest fixtures and exclusive resource locking;
+- DUT power/reset/flash hooks;
+- scenario loading and capability checks;
+- JUnit plus waveform/log artifacts;
+- infrastructure failure separated from DUT failure;
+- optional ROS2/ros2_control and Grafana/InfluxDB only after core evidence is stable.
+
+Track D never substitutes ordinary Linux GPIO timing for PL/PRU deterministic capabilities.
+
 # Convergence rules
 
 1. **ZU2CG remains the reference Full-HIL implementation.**
-2. **BBB is digital-only unless a later design explicitly expands it.**
-3. Host tests specify capabilities, not board names; AX7010 and future Zybo targets share FPGA-Lite semantics.
-4. Raw hardware time is represented as ticks plus clock metadata; conversion does not hide quantization.
-5. Linux is the control plane. Time-critical capture/generation/scheduling stays in FPGA PL or PRU.
-6. Unsupported capabilities fail/skip explicitly; they are never silently emulated with ordinary Linux GPIO timing.
-7. G1/G2/G3 continue even while B0-B3 are being developed.
-8. B4/G5 is the architectural convergence point.
+2. **BBB remains a PRU Digital-HIL backend unless explicitly expanded.**
+3. **AX7010/Zybo share FPGA-Lite semantics but keep board-specific clock/pin integration.**
+4. **Raspberry Pi is a controller/service plane, not a deterministic signal backend.**
+5. Host tests specify capabilities, not board names.
+6. Raw hardware time stays as ticks plus clock/counter metadata; host wall-clock time never replaces it.
+7. Time-critical capture/generation/scheduling stays in FPGA PL or PRU.
+8. Unsupported capabilities fail/skip explicitly; Linux timing loops are never silent substitutes.
+9. Fieldbus actions and signal-HIL events share scenario/evidence semantics but may have different clock domains.
+10. Directory migration is incremental: module names and verified behavior remain stable while source paths move.
 
 # Immediate priority
 
@@ -350,3 +401,14 @@ C0 AX7010 bring-up
    -> C4 single-motor PMSM-lite
    -> C5 PS/AXI + pytest backend
 ```
+
+
+**Raspberry Pi controller lane**
+
+~~~text
+D0 controller baseline
+   -> D1 EtherCAT/CANopen
+   -> D2 labgrid/pytest orchestration
+~~~
+
+The controller lane can progress in parallel with A/B/C because deterministic signal timing remains owned by those backends.

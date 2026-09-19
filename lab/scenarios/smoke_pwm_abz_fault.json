@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "name": "smoke-pwm-abz-fault",
+  "required_capabilities": [
+    "timebase",
+    "force_safe",
+    "pwm_capture",
+    "abz_generator",
+    "dio_scheduler"
+  ],
+  "steps": [
+    {
+      "at_ticks": 0,
+      "action": "safe.assert",
+      "args": {
+        "asserted": true
+      }
+    },
+    {
+      "at_ticks": 1000,
+      "action": "abz.configure",
+      "args": {
+        "direction": "forward",
+        "step_period_ticks": 10000,
+        "index_interval_edges": 4096
+      }
+    },
+    {
+      "at_ticks": 2000,
+      "action": "safe.release",
+      "args": {
+        "asserted": false
+      }
+    },
+    {
+      "at_ticks": 100000,
+      "action": "dio.schedule",
+      "args": {
+        "event_id": 1,
+        "mask": 1,
+        "value": 1
+      }
+    },
+    {
+      "at_ticks": 120000,
+      "action": "dio.schedule",
+      "args": {
+        "event_id": 2,
+        "mask": 1,
+        "value": 0
+      }
+    },
+    {
+      "at_ticks": 150000,
+      "action": "pwm.snapshot",
+      "args": {
+        "channels": [
+          0,
+          1,
+          2
+        ]
+      }
+    }
+  ]
+}

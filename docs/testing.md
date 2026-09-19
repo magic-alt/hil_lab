@@ -1,103 +1,87 @@
 # Verification Strategy
 
-Verification is split into backend-specific implementation gates and backend-neutral conformance tests.
+Verification is layered so simulation, backend conformance and physical HIL evidence are not conflated.
 
-## ZU2CG / FPGA gates
+## make verify
 
-`make verify` currently performs:
+Architecture v2 adds two gates before the existing RTL/board checks:
 
-1. `policy` — RTL-language and repository rules;
-2. `compile` — reusable-top elaboration with Icarus Verilog;
-3. `test` — self-checking RTL simulations;
-4. `lint` — Verilator lint;
-5. board-specific checks added by the AXU2CGB integration.
+1. architecture — validates architecture/manifest.json, required directories and capability registry consistency;
+2. host-test — pytest tests for the backend/scenario contract;
+3. existing Verilog policy/compile/simulation/lint;
+4. DAC/AXU2CGB gates;
+5. AX7010 gates;
+6. BBB static/host/core gates;
+7. MCU PWM stimulus checks.
 
-Current simulations cover:
+CI installs pytest and runs the same make verify entry point.
 
-- PWM period/high/low measurement;
-- complementary dead-time and fault latching;
-- ABZ transition/index generation;
-- SPI mode-0 serialization and deterministic bit corruption;
-- timestamped masked DIO updates.
+## Test taxonomy
 
-These gates remain mandatory while BBB work is added.
+- tests/unit — dependency-light pure unit tests;
+- tests/cocotb — future event/protocol/plant co-simulation;
+- tests/pytest — backend-neutral host API and scenario conformance;
+- tests/hil — hardware-required suites and resource definitions;
+- sim — existing self-checking Icarus/Verilog benches retained during migration.
 
-## BBB / PRU gates
+## Backend qualification ladders
 
-B0-B3 should introduce a separate verification ladder:
+ZU2CG:
 
-```text
-PRU build/static checks
-    -> host/PRU version + capability handshake
-    -> BBB header loopback
-    -> logic-analyzer timing qualification
-    -> protected adapter
-    -> real servo DUT
-```
+~~~text
+RTL simulation -> board loopback -> DUT digital -> DAC -> PMSM closed loop
+~~~
 
-Minimum evidence:
+AX7010/Zybo:
 
-- PRU firmware SHA/version;
-- timestamp clock/tick metadata;
-- safe-state behavior on boot/reset/PRU stop/host loss;
-- measured event timing;
-- event-loss/overflow counters;
-- maximum sustained input/output rate.
+~~~text
+RTL simulation -> timing/DRC -> connector loopback -> DUT signal HIL -> PMSM-lite
+~~~
+
+BBB:
+
+~~~text
+PRU static/build -> header loopback -> logic analyzer -> protected adapter -> DUT
+~~~
+
+Raspberry Pi controller:
+
+~~~text
+OS/service baseline -> cyclictest -> NIC/CAN -> fieldbus cycle evidence
+-> common backend discovery -> labgrid/pytest unattended bench
+~~~
+
+PREEMPT_RT installation alone is not an EtherCAT pass criterion. Record cycle time, jitter, WKC and DC/SYNC evidence under representative load.
 
 ## Cross-backend conformance
 
-B4 (#15) adds common tests for overlapping semantics.
+Tests declare capabilities. The same semantic test may use backend-specific numerical tolerances but may not branch on board model when a capability check is sufficient.
 
-Expected early matrix:
+Early overlap:
 
-| Capability | ZU2CG | BBB PRU |
-|---|---:|---:|
-| timestamp metadata | yes | B0 |
-| PWM capture | yes | B1 |
-| complementary dead-time | yes | B1 |
-| ABZ generation | yes | B2 |
-| deterministic digital events | yes | B3 |
-| SPI sensor emulation | yes | later/optional |
-| DAC analog feedback | G1 | no |
-| PMSM plant | G2 | no |
+| Capability | ZU2CG | AX7010 | BBB |
+|---|---:|---:|---:|
+| timebase/force_safe | yes | yes | yes |
+| PWM capture/dead-time | yes | yes | B1 |
+| ABZ generation | yes | yes | B2 |
+| deterministic DIO | yes | C3 | B3 |
+| sensor emulation | SPI | SSI/SPI | B2 serial |
+| analog feedback | G1 | external/future | no |
+| PMSM plant | G2 | C4 lite | no |
 
-A conformance test may use different timing tolerances per backend, but the logical meaning of measurements/events must remain consistent.
+## Scenario evidence
 
-## Hardware validation ladder
+Every hardware run records:
 
-Simulation success is not physical-HIL validation.
-
-### ZU2CG
-
-```text
-RTL simulation
-    -> FPGA internal/connector loopback
-    -> servo DUT digital interfaces
-    -> DAC evaluation board
-    -> closed-loop PMSM HIL
-```
-
-### BBB
-
-```text
-PRU build/test
-    -> PRU/header loopback
-    -> protected digital adapter
-    -> servo DUT PWM/ABZ
-    -> deterministic fault-response regression
-```
-
-## Required traceability
-
-Every hardware result must record:
-
-- backend name;
-- board/revision;
-- FPGA bitstream or PRU firmware revision;
-- DUT hardware revision;
-- DUT firmware commit;
+- controller image/kernel revision where present;
+- backend board/revision;
+- bitstream or PRU firmware revision;
+- DUT HW and firmware commit;
 - adapter/wiring revision;
-- timing source/tick frequency;
-- test configuration and pass/fail limits.
+- tick frequency/counter width;
+- fieldbus interface and configuration where used;
+- scenario file/version;
+- pass/fail limits;
+- infrastructure errors separately from DUT assertions.
 
-Infrastructure failure must be reported separately from DUT failure.
+A failed or interrupted test must return the bench to a defined safe state before resource release.
