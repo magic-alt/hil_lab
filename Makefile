@@ -22,13 +22,14 @@ ZYNQ7010_BOARD_RTL := $(RTL_COMMON) $(RTL_TIME) \
 	rtl/generator/abz_encoder_emulator.v rtl/capture/abz_encoder_capture.v \
 	rtl/generator/ssi_encoder_emulator.v rtl/capture/ssi_encoder_master_capture.v \
 	boards/zynq7010/rtl/ax7010_clock_gen.v boards/zynq7010/rtl/ax7010_fpga_lite_top.v
-ZYNQ7010_MOTOR_RTL := rtl/motor/pmsm_dq_plant_q16.v
+RTL_PLANT := rtl/plant/pmsm_dq_plant_q16.v rtl/plant/averaged_inverter_abc_q16.v rtl/plant/pmsm_mechanics_q16.v
+ZYNQ7010_MOTOR_RTL := $(RTL_PLANT)
 
 RTL_DAC := rtl/dac/dac_eval_pattern_generator.v rtl/dac/ad3542r_quad_stream.v
 AXU2CGB_RTL := boards/zu2cg/rtl/axu2cgb_clock_gen.v boards/zu2cg/rtl/axu2cgb_hil_top.v
 BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 
-.PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector \
+.PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics \
 	dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
 	zynq7010-constraints zynq7010-compile zynq7010-test zynq7010-lint \
@@ -59,7 +60,7 @@ compile: $(BUILD_DIR)
 lint:
 	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module hil_digital_core $(RTL)
 
-test: test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector
+test: test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics
 
 test-pwm: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pwm_capture.vvp $(RTL_COMMON) $(RTL_TIME) rtl/capture/pwm_capture.v sim/tb_pwm_capture.v
@@ -96,6 +97,14 @@ test-trigger: $(BUILD_DIR)
 test-fault-injector: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_digital_fault_injector.vvp rtl/scenario/digital_fault_injector.v sim/tb_digital_fault_injector.v
 	$(VVP) $(BUILD_DIR)/tb_digital_fault_injector.vvp
+
+test-plant-inverter: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_averaged_inverter_abc_q16.vvp rtl/plant/averaged_inverter_abc_q16.v sim/tb_averaged_inverter_abc_q16.v
+	$(VVP) $(BUILD_DIR)/tb_averaged_inverter_abc_q16.vvp
+
+test-plant-mechanics: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pmsm_mechanics_q16.vvp rtl/plant/pmsm_mechanics_q16.v sim/tb_pmsm_mechanics_q16.v
+	$(VVP) $(BUILD_DIR)/tb_pmsm_mechanics_q16.vvp
 
 dac-compile: $(BUILD_DIR)
 	$(IVERILOG) -g2005 -Wall -s ad3542r_quad_stream -o $(BUILD_DIR)/ad3542r_quad_stream.vvp rtl/dac/ad3542r_quad_stream.v

@@ -77,7 +77,12 @@ Reusable RTL added by this target:
 - rtl/encoder/ssi_encoder_master_capture.v
   - deterministic SSI-style clock generation;
   - synchronous position-word acquisition.
-- rtl/motor/pmsm_dq_plant_q16.v
+- rtl/plant/averaged_inverter_abc_q16.v
+  - averaged three-leg duty/Vbus reconstruction to line-neutral phase voltages;
+  - common-mode removal in Q16.16.
+- rtl/plant/pmsm_mechanics_q16.v
+  - reusable torque/load/viscous-damping mechanical state integrator.
+- rtl/plant/pmsm_dq_plant_q16.v
   - fixed-step Q16.16 averaged dq plant;
   - configurable discrete-time electrical/mechanical gains;
   - single-motor FPGA-Lite model before the ZU2CG Full-HIL plant.

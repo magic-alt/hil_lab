@@ -22,7 +22,7 @@ Recommended order:
 2. [x] capture-only PWM/encoder blocks -> rtl/capture/
 3. [x] PWM/ABZ/SSI/SPI generators -> rtl/generator/
 4. [x] rtl/io/dio_event_scheduler.v -> rtl/scenario/
-5. [ ] rtl/motor plant models -> rtl/plant/
+5. [x] rtl/motor plant models -> rtl/plant/
 6. [ ] reusable fault latches/queues/snapshot/FIFO helpers -> rtl/common/{fault,snapshot,fifo}/
 
 Each move updates root Makefile, board Vivado Tcl, policy checks and simulations in the same PR. Module names should remain unchanged unless behavior changes.
@@ -78,3 +78,7 @@ The legacy `rtl/pwm/` and `rtl/encoder/` trees are now forbidden by the architec
 Phase 4 adds a bounded timestamp-ordered event queue, queued DIO scenario executor, asynchronous trigger timestamp capture and deterministic digital stuck-high/stuck-low fault override. The original single-event `dio_event_scheduler` remains behavior-compatible but is now canonical under `rtl/scenario/`.
 
 The queue rejects out-of-order host inserts instead of silently reordering them. FORCE_SAFE flushes queued DIO actions and drives the configured safe value locally in hardware.
+
+## Plant Layer v1
+
+The PMSM-lite model is now canonical under `rtl/plant/`. Plant Layer v1 also adds an averaged two-level three-phase inverter primitive and a reusable fixed-step mechanical state integrator. The existing `pmsm_dq_plant_q16` remains behavior-compatible; the new primitives are intentionally not wired into it yet so model-boundary changes can be validated separately.

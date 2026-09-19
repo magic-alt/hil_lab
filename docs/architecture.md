@@ -74,7 +74,7 @@ tests/{unit,cocotb,pytest,hil}
 lab/{labgrid,resources,scenarios}
 ~~~
 
-Phase 1-4 is complete through Scenario Engine v1: timebase, capture, generator/emulator and deterministic scenario RTL are canonical under `rtl/common/timebase/`, `rtl/capture/`, `rtl/generator/` and `rtl/scenario/`. Plant and DAC families remain in legacy paths until each coherent family moves with all build references. See migration-v2.md.
+Phase 1-5 is complete through Plant Layer v1: timebase, capture, generator/emulator, scenario and plant RTL are canonical under the Architecture v2 hierarchy. Only the DAC family remains in its legacy RTL path pending the analog-I/O refactor. See migration-v2.md.
 
 ## Board boundaries
 
