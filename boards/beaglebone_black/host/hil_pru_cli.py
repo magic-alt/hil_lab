@@ -25,6 +25,11 @@ from hil_pru_protocol import (
     CAP_STIMULUS_ENGINE,
     CAP_ABZ_EMULATOR,
     CAP_SCHEDULED_GPIO,
+    CAP_HALL_EMULATOR,
+    CAP_SSI_EMULATOR,
+    CAP_BISS_EMULATOR,
+    CAP_SPI_SENSOR_EMULATOR,
+    CAP_SCHEDULED_APPLY,
     MSG_FORCE_SAFE,
     MSG_GPIO_LOOPBACK,
     MSG_HELLO,
@@ -48,6 +53,11 @@ CAP_NAMES = {
     CAP_STIMULUS_ENGINE: "stimulus_engine",
     CAP_ABZ_EMULATOR: "abz_emulator",
     CAP_SCHEDULED_GPIO: "scheduled_gpio",
+    CAP_HALL_EMULATOR: "hall_emulator",
+    CAP_SSI_EMULATOR: "ssi_emulator",
+    CAP_BISS_EMULATOR: "biss_emulator",
+    CAP_SPI_SENSOR_EMULATOR: "spi_sensor_emulator",
+    CAP_SCHEDULED_APPLY: "scheduled_apply",
 }
 
 
