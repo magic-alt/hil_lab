@@ -12,8 +12,9 @@ import time
 from pathlib import Path
 from typing import Iterable
 
-from hil_pru_protocol import (
-    CAP_FORCE_SAFE,
+try:
+    from .hil_pru_protocol import (
+CAP_FORCE_SAFE,
     CAP_GPIO_LOOPBACK,
     CAP_RPMSG,
     CAP_SHARED_SNAPSHOT,
@@ -39,6 +40,36 @@ from hil_pru_protocol import (
     ticks_to_us,
     us_to_ticks,
 )
+    )
+except ImportError:
+    from hil_pru_protocol import (
+CAP_FORCE_SAFE,
+    CAP_GPIO_LOOPBACK,
+    CAP_RPMSG,
+    CAP_SHARED_SNAPSHOT,
+    CAP_TIMEBASE,
+    CAP_WATCHDOG,
+    CAP_PWM_CAPTURE,
+    CAP_PWM_COMPLEMENTARY_MONITOR,
+    CAP_RAW_EDGE_CAPTURE,
+    CAP_STIMULUS_ENGINE,
+    CAP_ABZ_EMULATOR,
+    CAP_SCHEDULED_GPIO,
+    CAP_HALL_EMULATOR,
+    CAP_SSI_EMULATOR,
+    CAP_BISS_EMULATOR,
+    CAP_SPI_SENSOR_EMULATOR,
+    CAP_SCHEDULED_APPLY,
+    MSG_FORCE_SAFE,
+    MSG_GPIO_LOOPBACK,
+    MSG_HELLO,
+    MSG_PING,
+    MSG_TIME,
+    Message,
+    ticks_to_us,
+    us_to_ticks,
+)
+    )
 
 CAP_NAMES = {
     CAP_TIMEBASE: "timebase",

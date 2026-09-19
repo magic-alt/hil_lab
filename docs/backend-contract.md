@@ -26,7 +26,7 @@ Every deterministic backend reports:
 - counter_bits;
 - health/error counters.
 
-Every backend must provide timebase and force_safe.
+Every backend must provide timebase and force_safe. `read_timestamp()` returns raw backend time using the same tick metadata negotiated in `BackendIdentity`. `force_safe(False)` may be rejected when a hardware protocol exposes assertion but no generic deassert command; a backend must never fake release in Linux.
 
 ## Capability registry
 
@@ -93,3 +93,25 @@ Host code distinguishes:
 - DUT assertion failure.
 
 G5/D2 unattended Servo CI must preserve this distinction in reports and cleanup.
+
+
+## Concrete backends v1
+
+### BeagleBone Black / PRU
+
+`BeagleBonePruBackend` is a real adapter over the existing PRU0/PRU1 RPMsg ABI and PRUSS shared PWM snapshot.
+
+It maps only capabilities with a real current wire/data path:
+
+- TIMEBASE and FORCE_SAFE from PRU HELLO/TIME/FORCE_SAFE;
+- PWM_CAPTURE and PWM_COMPLEMENTARY_MONITOR from PRU0 B1 shared memory;
+- ABZ_GENERATOR from PRU1 B2;
+- SSI/BiSS/SPI sensor-emulator capability bits where PRU1 advertises them.
+
+`CAP_SCHEDULED_GPIO` is **not** currently mapped to common `DIO_SCHEDULER`, because the present PRU wire protocol has timestamped ABZ scheduling but no generic masked-DIO enqueue message.
+
+### ZU2CG / AXU2CGB and AX7010
+
+`Axu2cgbBackend` and `Ax7010Backend` are hardware-specific semantic adapters around a required PS/AXI/UIO transport. The transport must return a negotiated `BackendIdentity` from the actual hardware/bitstream.
+
+There is intentionally no hardwareless factory, Linux-GPIO implementation or assumed register map. Until G0/C5 freezes the real transport/register ABI, missing transport operations are reported as `InfrastructureError`.

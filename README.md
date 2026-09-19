@@ -87,7 +87,7 @@ Architecture v2 migration is active. Timebase, capture, generator, Scenario Engi
 - deterministic stimulus under rtl/generator;
 - motor/joint models under rtl/plant;
 - trigger/sequence/fault orchestration under rtl/scenario;
-- backend-neutral Python under host/hil;
+- backend-neutral Python under host/hil, with concrete BBB and fail-closed Zynq semantic adapters;
 - protocol adapters under fieldbus;
 - bench resources/scenarios under lab.
 
@@ -211,3 +211,9 @@ add only board-specific clock/pin/electrical integration where possible.
 4. optional ROS2/ros2_control and observability only above stable core interfaces
 
 Track D coordinates the bench; it does not replace PL/PRU deterministic timing.
+
+
+### Host backend status
+
+- **BBB/PRU:** `host.hil.backends.BeagleBonePruBackend` uses the existing RPMsg and PRUSS shared-memory runtime directly.
+- **AXU2CGB / AX7010:** semantic backend classes are present, but require a real negotiated PS/AXI/UIO transport. No register addresses or Linux-GPIO fallback are invented before G0/C5 freezes that ABI.

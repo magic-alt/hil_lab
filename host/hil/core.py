@@ -144,7 +144,16 @@ class HilBackend(ABC):
 
     @abstractmethod
     def force_safe(self, asserted: bool = True) -> None:
-        """Assert or release backend-local safe state."""
+        """Assert backend-local safe state.
+
+        A backend may reject asserted=False when its hardware protocol has no
+        explicit deassert operation. Tests must never assume that Linux cleanup
+        can release or recreate a hardware-local safety state.
+        """
+
+    def read_timestamp(self) -> Timestamp:
+        self.require(Capability.TIMEBASE)
+        raise NotImplementedError
 
     @abstractmethod
     def health(self) -> Mapping[str, Any]:
@@ -155,6 +164,14 @@ class HilBackend(ABC):
         raise NotImplementedError
 
     def configure_abz(self, **config: Any) -> None:
+        self.require(Capability.ABZ_GENERATOR)
+        raise NotImplementedError
+
+    def start_abz(self) -> None:
+        self.require(Capability.ABZ_GENERATOR)
+        raise NotImplementedError
+
+    def stop_abz(self) -> None:
         self.require(Capability.ABZ_GENERATOR)
         raise NotImplementedError
 

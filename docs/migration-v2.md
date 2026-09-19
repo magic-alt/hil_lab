@@ -31,10 +31,10 @@ Do not keep duplicate canonical and legacy RTL files. During migration the old p
 
 ## Phase 2 — common backend implementations
 
-- ZU2CG transport/AXI backend;
-- AX7010 PS/AXI backend;
-- BBB PRU adapter wrapping the already qualified command/snapshot ABI;
-- conformance tests against overlapping capabilities.
+- [ ] ZU2CG transport/AXI backend — semantic adapter added; physical transport/register ABI still required;
+- [ ] AX7010 PS/AXI backend — semantic adapter added; C5 transport/register ABI still required;
+- [x] BBB PRU adapter wrapping the qualified RPMsg/shared-snapshot ABI;
+- [x] dependency-injected conformance tests for backend capability/transport semantics; physical Zynq transport tests remain pending.
 
 The common API is semantic; it does not force identical transports.
 
@@ -82,3 +82,7 @@ The queue rejects out-of-order host inserts instead of silently reordering them.
 ## Plant Layer v1
 
 The PMSM-lite model is now canonical under `rtl/plant/`. Plant Layer v1 also adds an averaged two-level three-phase inverter primitive and a reusable fixed-step mechanical state integrator. The existing `pmsm_dq_plant_q16` remains behavior-compatible; the new primitives are intentionally not wired into it yet so model-boundary changes can be validated separately.
+
+## Host Backends v1
+
+The BBB backend is now concrete and can open the existing PRU0/PRU1 RPMsg endpoints plus PRUSS PWM snapshot reader. Zynq board classes are intentionally fail-closed semantic adapters: they require a transport that negotiates identity/capabilities from actual hardware. This preserves the rule that unsupported transport behavior is never emulated with Linux timing.
