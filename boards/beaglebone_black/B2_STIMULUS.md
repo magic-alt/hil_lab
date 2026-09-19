@@ -218,6 +218,12 @@ python3 hil_sensor_cli.py data --value 0xa55a
 python3 hil_sensor_cli.py start
 ```
 
+## PRU1 stack budget
+
+PR #45 increased the B2 runtime state enough that the previous 256-byte PRU1 stack was no longer sufficient. On real BBB hardware the firmware loaded under remoteproc but failed to register the RPMsg namespace; the disassembly showed a 208-byte `main` frame before nested PSSP RPMsg calls. Increasing the linker stack from `0x100` to the hardware-qualified `0x400` restored `/dev/rpmsg_pru31` immediately.
+
+Both B2 PRU1 firmware images therefore reserve a 1 KiB stack. Static gates prevent accidental regression to the old 256-byte budget. Future B2 growth should re-check generated disassembly/map depth before reducing this allocation.
+
 ## Timing and rollover
 
 All B2 firmware uses the shared PRU-ICSS IEP counter:
