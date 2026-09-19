@@ -138,8 +138,11 @@ sudo -E python3 hil_raw_cli.py capture \
 ```
 
 The host intentionally sleeps without RPMsg traffic while PRU0 fills the raw
-buffer. Only after the expected capture window has elapsed does it query status
-and read shared RAM.
+buffer. `RAW_START` only arms the capture request; after its RPMsg response is
+sent, PRU0 takes a **fresh R31 + IEP baseline** and only then publishes
+`running=1`. This prevents a stale control-plane sample from becoming a
+synthetic zero-dead-time first event. Only after the expected capture window
+has elapsed does the host query status and read shared RAM.
 
 To inspect recent raw edges after auto-stop:
 
@@ -196,3 +199,7 @@ After the U pair is validated:
 5. characterize maximum sustainable aggregate edge rate;
 6. inspect generated PRU assembly and establish a documented fixed sampling
    latency / resolution bound.
+
+## Measured U-pair baseline
+
+Real STM32F429I-DISC1 `20k_50_700ns` testing of the first raw implementation produced 1024/1024 events with no overflow. Steady reconstructed dead-time fell on 640 ns and 700 ns bins, implying an effective optimized-C polling granularity of about 60 ns (12 IEP ticks), while the IEP counter itself remains 5 ns/tick. The startup-boundary fix above removes the single 0 ns control-plane transition artifact before the next qualification sweep.
