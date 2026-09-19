@@ -28,7 +28,7 @@ ZYNQ7010_MOTOR_RTL := $(RTL_PLANT)
 
 RTL_DAC := rtl/dac/dac_eval_pattern_generator.v rtl/dac/ad3542r_quad_stream.v
 AXU2CGB_RTL := boards/zu2cg/rtl/axu2cgb_clock_gen.v boards/zu2cg/rtl/axu2cgb_hil_top.v
-BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
+BOARD_RTL := $(RTL) $(RTL_PLANT) $(RTL_DAC) $(AXU2CGB_RTL)
 
 .PHONY: all verify policy compile lint test test-axi-control zynq-axi-check test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics test-plant-transforms test-pmsm-closed-loop \
 	dac-compile dac-test dac-pattern-test dac-lint \
