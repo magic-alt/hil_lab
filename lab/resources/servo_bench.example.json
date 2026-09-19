@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "resource_id": "servo-bench-01",
+  "controller": "raspberry-pi-4",
+  "backend": "bbb_pru",
+  "dut": "servo-controller",
+  "adapter_revision": "signal-adapter-r1",
+  "fieldbus_interface": "eth1",
+  "notes": "Example inventory only; actual board/device revisions must be recorded by the test run."
+}

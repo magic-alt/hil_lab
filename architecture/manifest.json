@@ -33,7 +33,9 @@
     "boards/beaglebone_black",
     "boards/raspberry_pi",
     "boards/zybo",
-    "host/hil/backends"
+    "host/hil/backends",
+    "fieldbus",
+    "fieldbus/ethercat"
   ],
   "board_roles": {
     "boards/zu2cg": "full_hil_backend",

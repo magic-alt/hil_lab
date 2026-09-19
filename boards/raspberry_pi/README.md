@@ -2,15 +2,24 @@
 
 Track D uses Raspberry Pi as a Linux control plane, not as a deterministic PWM/encoder backend.
 
-Planned services:
+Controller v1 adds:
 
-- pytest and common host.hil API;
-- labgrid exporter/resource control;
-- IgH EtherCAT master and SOEM diagnostics;
-- SocketCAN/CANopen;
-- optional ROS2/ros2_control;
-- artifact/log collection and remote bench service lifecycle.
+- OS/kernel/NIC/tool environment probing;
+- PREEMPT_RT **hint detection** only — qualification still requires measured cyclictest evidence;
+- IgH `ethercat` CLI status/slave-scan evidence adapter;
+- configurable SOEM `slaveinfo` evidence adapter;
+- real Python-standard-library SocketCAN CAN_RAW transport;
+- CANopen NMT command and heartbeat primitives;
+- bench resource inventory and non-blocking Linux resource lock.
 
-PREEMPT_RT is optional and must be qualified with measured cyclictest and fieldbus cycle/DC/WKC evidence. Ordinary Linux GPIO timing must never be advertised as a deterministic backend capability.
+Still pending physical D0/D1 qualification:
+
+- cyclictest under idle/stress on the selected Pi image;
+- 1 ms EtherCAT cycle, WKC, DC/SYNC0 and jitter evidence;
+- real CAN interface/vcan execution in controller CI;
+- CANopen SDO/PDO/CiA402 implementation/qualification;
+- service startup/reboot/network-loss recovery.
+
+Ordinary Linux GPIO timing must never be advertised as a deterministic backend capability.
 
 See #47, #48 and #49.

@@ -311,6 +311,8 @@ and timing baseline is qualified.
 
 **Goal:** establish Raspberry Pi 4/5 as the reproducible Linux control plane.
 
+Software baseline implemented in Controller v1: environment/kernel/NIC/tool probing and resource identity/locking. Physical cyclictest/service-recovery qualification remains open.
+
 Scope:
 
 - supported OS/kernel image and service lifecycle;
@@ -323,6 +325,8 @@ Scope:
 ## D1 — fieldbus controller (#48)
 
 **Goal:** make fieldbus communication a first-class HIL service.
+
+Controller v1 provides IgH/SOEM probe adapters, real CAN_RAW transport and CANopen NMT/heartbeat primitives. Cyclic EtherCAT and full CANopen CiA402 remain open physical/protocol work.
 
 EtherCAT:
 

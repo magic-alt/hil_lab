@@ -217,3 +217,8 @@ Track D coordinates the bench; it does not replace PL/PRU deterministic timing.
 
 - **BBB/PRU:** `host.hil.backends.BeagleBonePruBackend` uses the existing RPMsg and PRUSS shared-memory runtime directly.
 - **AXU2CGB / AX7010:** semantic backend classes are present, but require a real negotiated PS/AXI/UIO transport. No register addresses or Linux-GPIO fallback are invented before G0/C5 freezes that ABI.
+
+
+### Linux Controller v1
+
+Track D now has dependency-light controller foundations: environment/tool probing, IgH/SOEM diagnostic adapters, stdlib SocketCAN, CANopen NMT/heartbeat primitives and exclusive bench resource locking. These are control-plane capabilities only. Real-time EtherCAT cycle/DC/WKC measurements and full CANopen CiA402 remain physical D1 qualification work.
