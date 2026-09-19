@@ -403,16 +403,14 @@ void main(void)
 
         if (enabled != 0u) {
             if ((mode == SERIAL_MODE_SSI) || (mode == SERIAL_MODE_BISS)) {
-                if (clk_rise || clk_fall)
-                    update_min_half_period(
-                        now,
-                        &last_edge_ticks,
-                        &min_half_period_ticks);
+                uint32_t edge_delta =
+                    (last_edge_ticks == 0u) ? 0u : (now - last_edge_ticks);
 
                 if (clk_fall) {
                     uint32_t gap_elapsed =
-                        (last_edge_ticks == now) ? 0u :
-                        ((now - last_edge_ticks) >= frame_gap_ticks ? 1u : 0u);
+                        (last_edge_ticks == 0u) ? 1u :
+                        ((frame_gap_ticks != 0u) &&
+                         (edge_delta >= frame_gap_ticks) ? 1u : 0u);
 
                     /*
                      * A long clock-idle gap re-arms the next master-driven
@@ -445,6 +443,12 @@ void main(void)
                     frame_active = 0u;
                     set_data_output(1u);
                 }
+
+                if (clk_rise || clk_fall)
+                    update_min_half_period(
+                        now,
+                        &last_edge_ticks,
+                        &min_half_period_ticks);
 
                 if (frame_active && (frame_gap_ticks != 0u) &&
                     ((now - last_edge_ticks) >= frame_gap_ticks)) {
