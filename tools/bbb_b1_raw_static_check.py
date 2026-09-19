@@ -54,15 +54,15 @@ def main() -> int:
         require(abi, pattern, label, errors)
 
     for pattern, label in [
-        (r"raw_r31 = __R31;", "single R31 loop sample"),
-        (r"raw_inputs = raw_r31 & R31_PWM_INPUT_MASK;", "native raw input mask"),
-        (r"if \(raw_inputs != last_inputs\)", "raw edge gate"),
+        (r"static uint32_t run_capture_window", "dedicated precision capture kernel"),
+        (r"uint32_t raw_inputs = __R31 & R31_PWM_INPUT_MASK;", "kernel R31 sample and native mask"),
+        (r"if \(raw_inputs == last_inputs\)", "tight no-change resample gate"),
         (r"timestamp_ticks = tick_now\(\);", "IEP timestamp"),
         (r"&g_raw_shared\.ring\[event_count\]", "linear raw ring slot"),
         (r"record->timestamp_ticks = timestamp_ticks;", "timestamp store"),
         (r"record->raw_inputs = raw_inputs;", "state store"),
         (r"event_count \+= 1u;", "local event counter"),
-        (r"continue;", "immediate return to sampling"),
+        (r"event_count >= event_limit", "bounded kernel exit"),
         (r"HIL_RAW_STOP_EVENT_LIMIT", "bounded auto-stop"),
         (r"start_pending", "post-RPMsg start arm state"),
         (r"baseline_raw = __R31 & R31_PWM_INPUT_MASK", "fresh post-RPMsg R31 baseline"),
@@ -72,6 +72,18 @@ def main() -> int:
         (r"HIL_PRU_B1_RAW_FIRMWARE_VERSION", "raw firmware version"),
     ]:
         require(main_c, pattern, label, errors)
+
+    kernel_match = re.search(
+        r"static uint32_t run_capture_window\([\s\S]+?\n}\n\nstatic void handle_request",
+        main_c,
+    )
+    if kernel_match is None:
+        errors.append("unable to isolate dedicated precision capture kernel")
+        kernel = ""
+    else:
+        kernel = kernel_match.group(0)
+
+    forbid(kernel, r"HOST_INT|pru_rpmsg|start_pending|capture_running", "control-plane work in precision kernel", errors)
 
     # Precision path must not call the old semantics-first analyzer.
     forbid(main_c, r"hil_pwm_capture_process", "inline PWM statistics in raw hot path", errors)
@@ -96,6 +108,7 @@ def main() -> int:
         (r"deadtime_high_to_low_ns", "host H->L dead-time reconstruction"),
         (r"deadtime_low_to_high_ns", "host L->H dead-time reconstruction"),
         (r"min_deadtime_violation_count", "host dead-time policy"),
+        (r"tick_histogram", "host raw-tick histograms"),
     ]:
         require(host, pattern, label, errors)
 
@@ -110,7 +123,7 @@ def main() -> int:
         return 1
 
     print("BBB B1 raw-edge static checks: PASS")
-    print("  hot path: R31 -> changed -> IEP -> 8-byte record -> resample")
+    print("  hot path v2: dedicated R31 -> compare -> IEP -> 8-byte record loop")
     print("  bounded ring: 1024 events")
     print("  analysis: Linux/offline")
     return 0
