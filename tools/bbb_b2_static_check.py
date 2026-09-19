@@ -90,6 +90,7 @@ def main() -> int:
     require(rsc_c, r"VIRTIO_ID_RPMSG", "PRU1 RPMsg vdev", errors)
     require(makefile, r"hil_b2_pru1\.out", "B2 PRU1 target", errors)
     require(makefile, r"-O3", "optimized PRU1 build", errors)
+    require(makefile, r"--stack_size=0x400", "qualified 1 KiB PRU1 stack budget", errors)
 
     for pin, bit in (("P8_45", 0), ("P8_46", 1), ("P8_43", 2)):
         require(pinmux, rf"config-pin {pin} pruout", f"{pin} pruout", errors)
