@@ -80,7 +80,7 @@ Architecture v2 separates the bench into deterministic data planes and a Linux c
 
 The controller may command EtherCAT/CANopen traffic while a hardware backend captures PWM, generates encoder/sensor feedback and fires deterministic faults. Linux must not bit-bang a capability that is advertised as deterministic.
 
-Architecture v2 migration is active. Timebase, capture and deterministic generator RTL now use canonical v2 paths; plant/scenario families continue to migrate incrementally:
+Architecture v2 migration is active. Timebase, capture, generator and Scenario Engine v1 now use canonical v2 paths; the plant family continues to migrate incrementally:
 
 - common timing/snapshot/fault primitives under rtl/common;
 - acquisition blocks under rtl/capture;
@@ -142,7 +142,7 @@ hil_lab/
 └── Makefile
 ~~~
 
-Phase 1-3 is complete: `hil_timebase` is under `rtl/common/timebase/`, acquisition is under `rtl/capture/`, and PWM/ABZ/SSI/SPI stimulus is under `rtl/generator/`. The legacy `rtl/pwm/` and `rtl/encoder/` trees are now forbidden by the architecture gate.
+Phase 1-4 is complete through Scenario Engine v1: timebase, acquisition and stimulus use canonical v2 paths; `rtl/scenario/` now contains queued timestamped DIO execution, external trigger capture and digital stuck-high/stuck-low fault primitives. Legacy `rtl/pwm/`, `rtl/encoder/` and `rtl/io/` trees are forbidden by the architecture gate.
 
 ## Verification
 

@@ -12,9 +12,9 @@ RTL_COMMON := rtl/common/sync_2ff.v
 RTL_TIME := rtl/common/timebase/hil_timebase.v
 RTL_CAPTURE := rtl/capture/pwm_capture.v rtl/capture/pwm_complementary_monitor.v
 RTL_GENERATOR := rtl/generator/abz_encoder_emulator.v rtl/generator/spi_encoder_emulator.v
-RTL_IO := rtl/io/dio_event_scheduler.v
+RTL_SCENARIO := rtl/scenario/dio_event_scheduler.v rtl/scenario/hil_event_queue.v rtl/scenario/dio_scenario_engine.v rtl/scenario/trigger_engine.v rtl/scenario/digital_fault_injector.v
 RTL_TOP := rtl/top/hil_digital_core.v
-RTL := $(RTL_COMMON) $(RTL_TIME) $(RTL_CAPTURE) $(RTL_GENERATOR) $(RTL_IO) $(RTL_TOP)
+RTL := $(RTL_COMMON) $(RTL_TIME) $(RTL_CAPTURE) $(RTL_GENERATOR) $(RTL_SCENARIO) $(RTL_TOP)
 
 ZYNQ7010_BOARD_RTL := $(RTL_COMMON) $(RTL_TIME) \
 	rtl/capture/pwm_capture.v rtl/capture/pwm_complementary_monitor.v \
@@ -28,7 +28,7 @@ RTL_DAC := rtl/dac/dac_eval_pattern_generator.v rtl/dac/ad3542r_quad_stream.v
 AXU2CGB_RTL := boards/zu2cg/rtl/axu2cgb_clock_gen.v boards/zu2cg/rtl/axu2cgb_hil_top.v
 BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 
-.PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event \
+.PHONY: all verify policy compile lint test test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector \
 	dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
 	zynq7010-constraints zynq7010-compile zynq7010-test zynq7010-lint \
@@ -59,7 +59,7 @@ compile: $(BUILD_DIR)
 lint:
 	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module hil_digital_core $(RTL)
 
-test: test-pwm test-deadtime test-abz test-spi test-event
+test: test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector
 
 test-pwm: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pwm_capture.vvp $(RTL_COMMON) $(RTL_TIME) rtl/capture/pwm_capture.v sim/tb_pwm_capture.v
@@ -78,8 +78,24 @@ test-spi: $(BUILD_DIR)
 	$(VVP) $(BUILD_DIR)/tb_spi_encoder_emulator.vvp
 
 test-event: $(BUILD_DIR)
-	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_dio_event_scheduler.vvp $(RTL_TIME) rtl/io/dio_event_scheduler.v sim/tb_dio_event_scheduler.v
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_dio_event_scheduler.vvp $(RTL_TIME) rtl/scenario/dio_event_scheduler.v sim/tb_dio_event_scheduler.v
 	$(VVP) $(BUILD_DIR)/tb_dio_event_scheduler.vvp
+
+test-event-queue: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_hil_event_queue.vvp rtl/scenario/hil_event_queue.v sim/tb_hil_event_queue.v
+	$(VVP) $(BUILD_DIR)/tb_hil_event_queue.vvp
+
+test-scenario-engine: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_dio_scenario_engine.vvp $(RTL_TIME) rtl/scenario/hil_event_queue.v rtl/scenario/dio_scenario_engine.v sim/tb_dio_scenario_engine.v
+	$(VVP) $(BUILD_DIR)/tb_dio_scenario_engine.vvp
+
+test-trigger: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_trigger_engine.vvp $(RTL_COMMON) $(RTL_TIME) rtl/scenario/trigger_engine.v sim/tb_trigger_engine.v
+	$(VVP) $(BUILD_DIR)/tb_trigger_engine.vvp
+
+test-fault-injector: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_digital_fault_injector.vvp rtl/scenario/digital_fault_injector.v sim/tb_digital_fault_injector.v
+	$(VVP) $(BUILD_DIR)/tb_digital_fault_injector.vvp
 
 dac-compile: $(BUILD_DIR)
 	$(IVERILOG) -g2005 -Wall -s ad3542r_quad_stream -o $(BUILD_DIR)/ad3542r_quad_stream.vvp rtl/dac/ad3542r_quad_stream.v

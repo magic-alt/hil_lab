@@ -21,7 +21,7 @@ Recommended order:
 1. [x] rtl/time/hil_timebase.v -> rtl/common/timebase/
 2. [x] capture-only PWM/encoder blocks -> rtl/capture/
 3. [x] PWM/ABZ/SSI/SPI generators -> rtl/generator/
-4. [ ] rtl/io/dio_event_scheduler.v -> rtl/scenario/
+4. [x] rtl/io/dio_event_scheduler.v -> rtl/scenario/
 5. [ ] rtl/motor plant models -> rtl/plant/
 6. [ ] reusable fault latches/queues/snapshot/FIFO helpers -> rtl/common/{fault,snapshot,fifo}/
 
@@ -72,3 +72,9 @@ Module names and behavior are unchanged; this is a source-taxonomy migration onl
 ## Phase 3 completion invariant
 
 The legacy `rtl/pwm/` and `rtl/encoder/` trees are now forbidden by the architecture gate. Their generator/emulator sources moved without module or logic changes to `rtl/generator/`.
+
+## Scenario Engine v1
+
+Phase 4 adds a bounded timestamp-ordered event queue, queued DIO scenario executor, asynchronous trigger timestamp capture and deterministic digital stuck-high/stuck-low fault override. The original single-event `dio_event_scheduler` remains behavior-compatible but is now canonical under `rtl/scenario/`.
+
+The queue rejects out-of-order host inserts instead of silently reordering them. FORCE_SAFE flushes queued DIO actions and drives the configured safe value locally in hardware.
