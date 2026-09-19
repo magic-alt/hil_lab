@@ -16,7 +16,8 @@ set_property simulator_language Verilog [current_project]
 
 set rtl_files [concat \
     [glob -nocomplain [file join $repo_root rtl common *.v]] \
-    [glob -nocomplain [file join $repo_root rtl time *.v]] \
+    [glob -nocomplain [file join $repo_root rtl common timebase *.v]] \
+    [glob -nocomplain [file join $repo_root rtl capture *.v]] \
     [glob -nocomplain [file join $repo_root rtl pwm *.v]] \
     [glob -nocomplain [file join $repo_root rtl encoder *.v]] \
     [glob -nocomplain [file join $repo_root rtl io *.v]] \

@@ -18,12 +18,12 @@ Architecture v2 therefore creates the target taxonomy first and migrates one coh
 
 Recommended order:
 
-1. rtl/time/hil_timebase.v -> rtl/common/timebase/
-2. capture-only PWM/encoder blocks -> rtl/capture/
-3. PWM/ABZ/SSI/SPI generators -> rtl/generator/
-4. rtl/io/dio_event_scheduler.v -> rtl/scenario/
-5. rtl/motor plant models -> rtl/plant/
-6. reusable fault latches/queues/snapshot/FIFO helpers -> rtl/common/{fault,snapshot,fifo}/
+1. [x] rtl/time/hil_timebase.v -> rtl/common/timebase/
+2. [x] capture-only PWM/encoder blocks -> rtl/capture/
+3. [ ] PWM/ABZ/SSI/SPI generators -> rtl/generator/
+4. [ ] rtl/io/dio_event_scheduler.v -> rtl/scenario/
+5. [ ] rtl/motor plant models -> rtl/plant/
+6. [ ] reusable fault latches/queues/snapshot/FIFO helpers -> rtl/common/{fault,snapshot,fifo}/
 
 Each move updates root Makefile, board Vivado Tcl, policy checks and simulations in the same PR. Module names should remain unchanged unless behavior changes.
 
@@ -56,3 +56,15 @@ The common API is semantic; it does not force identical transports.
 ## Review rule
 
 A refactor PR is accepted only if it preserves current verification gates or replaces them with stronger equivalent gates. Hardware-validation status must never be changed from pending to passed by a directory-only change.
+
+## Phase 1-2 completion invariant
+
+The following legacy source paths are now forbidden by `architecture/manifest.json` and `tools/architecture_check.py`:
+
+- `rtl/time/hil_timebase.v`;
+- `rtl/pwm/pwm_capture.v`;
+- `rtl/pwm/pwm_complementary_monitor.v`;
+- `rtl/encoder/abz_encoder_capture.v`;
+- `rtl/encoder/ssi_encoder_master_capture.v`.
+
+Module names and behavior are unchanged; this is a source-taxonomy migration only.

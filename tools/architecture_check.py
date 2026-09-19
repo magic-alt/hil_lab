@@ -36,6 +36,18 @@ def main() -> int:
         if not (ROOT / relative).exists():
             errors.append(f"missing required architecture path: {relative}")
 
+    forbidden_paths = manifest.get("forbidden_paths", [])
+    if not isinstance(forbidden_paths, list):
+        errors.append("forbidden_paths must be a list")
+        forbidden_paths = []
+
+    for relative in forbidden_paths:
+        if not isinstance(relative, str):
+            errors.append(f"non-string forbidden path: {relative!r}")
+            continue
+        if (ROOT / relative).exists():
+            errors.append(f"forbidden legacy architecture path exists: {relative}")
+
     roles = manifest.get("board_roles", {})
     if not isinstance(roles, dict):
         errors.append("board_roles must be an object")
@@ -79,7 +91,8 @@ def main() -> int:
 
     print(
         "architecture-check: PASS "
-        f"({len(required_paths)} paths, {len(declared_set)} backend capabilities)"
+        f"({len(required_paths)} paths, {len(forbidden_paths)} forbidden legacy paths, "
+        f"{len(declared_set)} backend capabilities)"
     )
     return 0
 

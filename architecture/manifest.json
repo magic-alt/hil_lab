@@ -70,11 +70,17 @@
     "ros2_optional"
   ],
   "legacy_rtl_mapping": {
-    "rtl/time": "rtl/common/timebase",
-    "rtl/pwm": "rtl/capture + rtl/generator",
-    "rtl/encoder": "rtl/capture + rtl/generator",
+    "rtl/pwm": "generator-only modules remain; migrate to rtl/generator",
+    "rtl/encoder": "generator/emulator-only modules remain; migrate to rtl/generator",
     "rtl/io": "rtl/scenario + interface-specific I/O",
     "rtl/motor": "rtl/plant",
     "rtl/dac": "board/interface analog I/O"
-  }
+  },
+  "forbidden_paths": [
+    "rtl/time/hil_timebase.v",
+    "rtl/pwm/pwm_capture.v",
+    "rtl/pwm/pwm_complementary_monitor.v",
+    "rtl/encoder/abz_encoder_capture.v",
+    "rtl/encoder/ssi_encoder_master_capture.v"
+  ]
 }

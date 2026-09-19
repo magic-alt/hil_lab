@@ -74,7 +74,7 @@ tests/{unit,cocotb,pytest,hil}
 lab/{labgrid,resources,scenarios}
 ~~~
 
-Existing verified RTL remains in rtl/time, rtl/pwm, rtl/encoder, rtl/io, rtl/motor and rtl/dac until each family is migrated with all Makefile and Vivado references in one PR. See migration-v2.md.
+Phase 1-2 migration is complete: the timebase is canonical under `rtl/common/timebase/`, and capture-only PWM/ABZ/SSI blocks are canonical under `rtl/capture/`. Generator/emulator, scenario, plant and DAC families remain in their legacy paths until each coherent family moves with all Makefile/Vivado references. See migration-v2.md.
 
 ## Board boundaries
 
