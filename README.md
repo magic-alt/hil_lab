@@ -149,7 +149,7 @@ Existing rtl/time, rtl/pwm, rtl/encoder, rtl/io, rtl/motor and rtl/dac paths rem
 Current software/RTL gates:
 
 ```bash
-sudo apt-get install iverilog verilator make python3
+sudo apt-get install iverilog verilator make python3 python3-pytest
 make verify
 ```
 
@@ -184,7 +184,7 @@ Hardware evidence must always record:
 4. B3 deterministic digital fault/stimulus scheduler
 5. B4 common backend API and conformance tests
 
-The two tracks converge in G5/B4. New tests should target the common HIL semantics when possible and declare required capabilities explicitly.
+Tracks A/B/C converge on common HIL semantics through G5/B4/C5. Track D consumes the same contract for orchestration and fieldbus scenarios. New tests should declare required capabilities explicitly.
 
 
 ### Track C — FPGA-Lite HIL

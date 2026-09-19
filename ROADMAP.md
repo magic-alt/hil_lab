@@ -7,7 +7,7 @@
 - **Track C (C-series): Zynq-7010 / AX7010 FPGA-Lite HIL** is a low-cost parallel-FPGA path for signal generation/capture and a resource-bounded single-motor plant.
 - **Track D (D-series): Raspberry Pi HIL Controller** owns Linux orchestration, fieldbus, DUT lifecycle and test evidence; it is not a deterministic edge-generation backend.
 
-Tracks B/C accelerate firmware validation but do not replace Track A analog/multi-axis/joint-model work.
+Tracks B/C accelerate deterministic firmware validation without replacing Track A analog/multi-axis/joint-model work. Track D coordinates the bench and fieldbus services without replacing any real-time backend.
 
 # Track A — ZU2CG / AXU2CGB Full HIL
 
