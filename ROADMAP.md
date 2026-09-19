@@ -140,17 +140,31 @@ Exit criteria:
 - [ ] scope/logic-analyzer comparison;
 - [ ] sustainable event-rate and timing error characterized.
 
-## B2 — PRU ABZ encoder generator (#13)
+## B2 — PRU stimulus / encoder emulation (#13)
 
-**Goal:** drive a real servo MCU QEP/timer input without a motor encoder.
+**Goal:** drive servo MCU encoder/sensor inputs without a physical motor or
+sensor board while keeping real-time edges inside PRU1.
 
-Exit criteria:
+Implemented/development baseline:
 
-- [ ] valid forward/reverse quadrature;
-- [ ] deterministic speed/direction updates;
-- [ ] configurable index behavior;
-- [ ] maximum transition rate characterized;
-- [ ] real servo-MCU position/direction validation.
+- [x] ABZ forward/reverse quadrature and configurable index;
+- [x] physical 60 rpm / 1000 PPR forward/reverse Gray-sequence validation;
+- [x] ABZ transition-rate sweep through 2 Mtransition/s;
+- [x] ACK-before-run boundary for immediate ABZ/Hall start;
+- [x] absolute-timestamp ABZ arm plus one queued speed/direction update;
+- [x] Hall UVW six-step stimulus;
+- [x] alternate SSI/BiSS-C/SPI-style serial-emulator firmware;
+- [x] BiSS-C position/status/inverted-CRC6 framing baseline.
+
+Remaining exit criteria:
+
+- [ ] repeat ABZ max-rate characterization after ACK-before-run change;
+- [ ] physically validate timestamped speed/direction update timing;
+- [ ] real servo-MCU QEP position/direction validation;
+- [ ] Hall/generic stimulus physical validation;
+- [ ] SSI/BiSS-C/SPI electrical/timing qualification and measured clock limits;
+- [ ] named-device SPI protocol only after its command/register behavior is implemented;
+- [ ] ABZ and serial fault-injection cases.
 
 ## B3 — deterministic fault/stimulus GPIO (#14)
 

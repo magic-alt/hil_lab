@@ -14,15 +14,50 @@ from hil_abz import (
 )
 from hil_pru_cli import HilPru, hello
 from hil_pru_protocol import (
+    MSG_ABZ_ARM,
     MSG_ABZ_CONFIG,
     MSG_ABZ_DIRECTION,
+    MSG_ABZ_SCHEDULE,
     MSG_ABZ_START,
     MSG_ABZ_STATUS,
     MSG_ABZ_STOP,
     MSG_FORCE_SAFE,
+    MSG_HALL_CONFIG,
+    MSG_HALL_START,
+    MSG_HALL_STATUS,
+    MSG_HALL_STOP,
+    MSG_STIM_STATUS,
+    MSG_TIME,
+    us_to_ticks,
 )
 
 ABZ_MIN_TRANSITION_TICKS = 100
+ABZ_SCHED_TRANSITION_VALID = 1 << 0
+ABZ_SCHED_DIRECTION_VALID = 1 << 1
+
+STIM_STATE_NAMES = {
+    0: "idle",
+    1: "running",
+    2: "armed",
+}
+STIM_MODE_NAMES = {
+    0: "none",
+    1: "abz",
+    2: "hall",
+}
+
+
+def resolve_future_ticks(client: HilPru, tick_hz: int, apply_ticks: int | None, after_us: float | None) -> int:
+    if (apply_ticks is None) == (after_us is None):
+        raise ValueError("select exactly one of --apply-ticks or --after-us")
+    if apply_ticks is not None:
+        if not 0 <= apply_ticks <= 0xFFFFFFFF:
+            raise ValueError("--apply-ticks must fit uint32")
+        return apply_ticks
+    if after_us is None or after_us <= 0:
+        raise ValueError("--after-us must be > 0")
+    now = client.request(MSG_TIME).arg0
+    return (now + us_to_ticks(after_us, tick_hz)) & 0xFFFFFFFF
 
 
 def discover_stim_device(explicit: str | None) -> str:
@@ -114,6 +149,39 @@ def main() -> int:
 
     direction = sub.add_parser("direction")
     direction.add_argument("value", choices=("forward", "reverse"))
+    arm = sub.add_parser("arm", help="schedule ABZ start at an absolute/future IEP timestamp")
+    arm.add_argument("--apply-ticks", type=lambda value: int(value, 0))
+    arm.add_argument("--after-us", type=float)
+
+    schedule = sub.add_parser(
+        "schedule",
+        help="queue one ABZ speed/direction update before an armed run",
+    )
+    schedule.add_argument("--apply-ticks", type=lambda value: int(value, 0))
+    schedule.add_argument("--after-us", type=float)
+    schedule.add_argument("--transition-ticks", type=int)
+    schedule.add_argument("--transition-hz", type=float)
+    schedule.add_argument("--rpm", type=float)
+    schedule.add_argument("--ppr", type=int)
+    schedule.add_argument("--direction", choices=("forward", "reverse"))
+
+    sub.add_parser("scheduler-status")
+
+    hall_config = sub.add_parser("hall-config")
+    hall_config.add_argument("--transition-ticks", type=int)
+    hall_config.add_argument("--transition-hz", type=float)
+    hall_config.add_argument("--rpm", type=float)
+    hall_config.add_argument("--ppr", type=int)
+    hall_config.add_argument(
+        "--direction",
+        choices=("forward", "reverse"),
+        default="forward",
+    )
+    hall_config.add_argument("--initial-step", type=int, default=0)
+    sub.add_parser("hall-start")
+    sub.add_parser("hall-stop")
+    sub.add_parser("hall-status")
+
 
     args = parser.parse_args()
     device = discover_stim_device(args.device)
@@ -167,10 +235,11 @@ def main() -> int:
             response = client.request(MSG_ABZ_START)
             result = {
                 "status": response.flags,
-                "actual_start_ticks": response.arg0,
+                "arm_request_ticks": response.arg0,
                 "initial_abz_bits": response.arg1,
-                "first_transition_ticks": response.arg2,
+                "transition_ticks": response.arg2,
                 "direction": "reverse" if response.arg3 else "forward",
+                "semantics": "ACK sent before the PRU establishes the fresh run timestamp",
             }
 
         elif args.command == "stop":
@@ -180,13 +249,15 @@ def main() -> int:
                 "actual_stop_ticks": response.arg0,
                 "transition_count": response.arg1,
                 "late_transition_count": response.arg2,
+                "schedule_late_count": response.arg3,
             }
 
         elif args.command == "status":
             response = client.request(MSG_ABZ_STATUS)
             result = {
                 "status": response.flags,
-                "running": bool(response.arg0),
+                "state": STIM_STATE_NAMES.get(response.arg0, f"unknown-{response.arg0}"),
+                "running": response.arg0 == 1,
                 "transition_ticks": response.arg1,
                 "transition_count": response.arg2,
                 "late_transition_count": response.arg3,
@@ -200,6 +271,133 @@ def main() -> int:
                 "actual_apply_ticks": response.arg0,
                 "direction": "reverse" if response.arg1 else "forward",
                 "transition_count": response.arg2,
+            }
+
+        elif args.command == "arm":
+            info = hello(client)
+            apply_ticks = resolve_future_ticks(
+                client,
+                int(info["tick_hz"]),
+                args.apply_ticks,
+                args.after_us,
+            )
+            response = client.request(MSG_ABZ_ARM, arg0=apply_ticks)
+            result = {
+                "status": response.flags,
+                "arm_request_ticks": response.arg0,
+                "requested_apply_ticks": response.arg1,
+                "transition_ticks": response.arg2,
+                "direction": "reverse" if response.arg3 else "forward",
+            }
+
+        elif args.command == "schedule":
+            info = hello(client)
+            tick_hz = int(info["tick_hz"])
+            apply_ticks = resolve_future_ticks(
+                client,
+                tick_hz,
+                args.apply_ticks,
+                args.after_us,
+            )
+
+            rate_selected = sum(
+                value is not None
+                for value in (args.transition_ticks, args.transition_hz, args.rpm)
+            )
+            flags = 0
+            ticks = 0
+            if rate_selected:
+                if rate_selected != 1:
+                    raise ValueError(
+                        "select at most one of --transition-ticks, --transition-hz, or --rpm"
+                    )
+                ticks, _ = resolve_transition_ticks(args, tick_hz)
+                flags |= ABZ_SCHED_TRANSITION_VALID
+
+            direction_value = 0
+            if args.direction is not None:
+                direction_value = 0 if args.direction == "forward" else 1
+                flags |= ABZ_SCHED_DIRECTION_VALID
+
+            if flags == 0:
+                raise ValueError("schedule requires a speed and/or direction change")
+
+            response = client.request(
+                MSG_ABZ_SCHEDULE,
+                arg0=apply_ticks,
+                arg1=ticks,
+                arg2=direction_value,
+                arg3=flags,
+            )
+            result = {
+                "status": response.flags,
+                "queue_request_ticks": response.arg0,
+                "requested_apply_ticks": response.arg1,
+                "transition_ticks": response.arg2,
+                "flags": response.arg3,
+            }
+
+        elif args.command == "scheduler-status":
+            response = client.request(MSG_STIM_STATUS)
+            result = {
+                "status": response.flags,
+                "state": STIM_STATE_NAMES.get(response.arg0, f"unknown-{response.arg0}"),
+                "mode": STIM_MODE_NAMES.get(response.arg1, f"unknown-{response.arg1}"),
+                "last_apply_ticks": response.arg2,
+                "schedule_late_count": response.arg3,
+            }
+
+        elif args.command == "hall-config":
+            info = hello(client)
+            tick_hz = int(info["tick_hz"])
+            ticks, derived_rpm = resolve_transition_ticks(args, tick_hz)
+            if not 0 <= args.initial_step < 6:
+                raise ValueError("--initial-step must be 0..5")
+            requested_direction = 0 if args.direction == "forward" else 1
+            response = client.request(
+                MSG_HALL_CONFIG,
+                arg0=ticks,
+                arg1=requested_direction,
+                arg2=args.initial_step,
+            )
+            result = {
+                "status": response.flags,
+                "transition_ticks": response.arg0,
+                "transition_hz": tick_hz / response.arg0 if response.arg0 else None,
+                "equivalent_rpm": derived_rpm,
+                "direction": args.direction,
+                "initial_step": response.arg2,
+                "initial_hall_bits": response.arg3,
+            }
+
+        elif args.command == "hall-start":
+            response = client.request(MSG_HALL_START)
+            result = {
+                "status": response.flags,
+                "arm_request_ticks": response.arg0,
+                "initial_hall_bits": response.arg1,
+                "transition_ticks": response.arg2,
+                "direction": "reverse" if response.arg3 else "forward",
+                "semantics": "ACK sent before the PRU establishes the fresh run timestamp",
+            }
+
+        elif args.command == "hall-stop":
+            response = client.request(MSG_HALL_STOP)
+            result = {
+                "status": response.flags,
+                "actual_stop_ticks": response.arg0,
+                "transition_count": response.arg1,
+                "late_transition_count": response.arg2,
+            }
+
+        elif args.command == "hall-status":
+            response = client.request(MSG_HALL_STATUS)
+            result = {
+                "status": response.flags,
+                "running": bool(response.arg0),
+                "transition_ticks": response.arg1,
+                "transition_count": response.arg2,
+                "late_transition_count": response.arg3,
             }
 
         else:

@@ -1,124 +1,257 @@
-# B2 PRU1 stimulus / emulation — ABZ baseline
+# B2 PRU1 stimulus / encoder emulation
 
 Issue: #13
 
-B2 turns PRU1 into the deterministic digital stimulus/emulation engine while PRU0 remains the capture engine.
+B2 uses PRU1 as the deterministic digital stimulus engine while PRU0 remains the
+capture engine. Linux/RPMsg is the control plane only; real-time edges stay in
+PRU1.
 
-## Architecture
+## Firmware split
 
-Linux/RPMsg configures rate, direction, initial phase and index behavior. PRU1 owns every real-time ABZ edge.
+Two mutually exclusive PRU1 firmware images are provided.
 
-First B2.1 map:
+### `pru1_b2`: ABZ scheduler + Hall
 
-| Signal | BBB pin | PRU1 output |
+Pins:
+
+| Signal | BBB pin | PRU1 direct signal |
 | --- | --- | --- |
-| A | P8_45 | R30[0] |
-| B | P8_46 | R30[1] |
-| Z | P8_43 | R30[2] |
+| A / Hall-U | P8_45 | R30[0] |
+| B / Hall-V | P8_46 | R30[1] |
+| Z / Hall-W | P8_43 | R30[2] |
 
-Configure pins:
+ABZ forward Gray sequence:
 
-    cd ~/hil_lab/boards/beaglebone_black
-    sudo sh pinmux/setup_b2_abz_outputs.sh
+```text
+00 -> 10 -> 11 -> 01 -> 00
+```
 
-These P8 pins overlap the BBB LCD/HDMI pin group. Use a headless configuration and ensure the active device-tree/cape setup leaves them available for `pruout`.
+Reverse walks the same Gray states in the opposite direction.
 
-## PRU1 RPMsg
+The nominal ABZ path has already been physically validated at 60 rpm / 1000 PPR
+in both directions with zero illegal transitions. The first max-rate sweep on
+firmware 0x00030000 showed zero whole-period late transitions through
+500 ktransition/s; 1 MHz and above exposed a control-plane START boundary.
 
-- PRU -> ARM system event: 18
-- ARM -> PRU system event: 19
-- Host interrupt: Host1 / R31[31]
-- RPMsg port: 31
-- firmware name: `am335x-pru1-fw`
+Firmware 0x00031000 changes immediate START semantics to **ACK-before-run**:
 
-The PRU1 controller is discovered by name (`4a338000.pru` / `pruss-core1`) rather than assuming a fixed remoteproc number.
+```text
+ABZ_START request
+  -> validate / mark pending
+  -> send RPMsg ACK
+  -> fresh IEP timestamp
+  -> apply initial ABZ state
+  -> establish first deadline
+  -> RUN
+```
 
-## Quadrature convention
+This prevents the RPMsg response path from consuming the first high-rate
+transition period.
 
-Forward A/B sequence is `00 -> 10 -> 11 -> 01 -> 00`, so A leads B. Reverse traverses the same Gray-code states in the opposite direction.
+A bounded timestamped scheduler foundation is also included:
 
-The generator changes one state every `transition_ticks`.
+```text
+CONFIG
+  -> ARM at absolute 32-bit IEP timestamp
+  -> optionally queue one future speed/direction update
+  -> RUN without Linux edge timing
+  -> STOP / FORCE_SAFE
+```
 
-For PPR-style host configuration:
+The single queued update is intentionally a foundation for the later bounded
+schedule queue. It is sufficient to qualify deterministic speed-step and
+direction-reversal semantics without Linux toggling edges in real time.
 
-    transition_rate = rpm / 60 * PPR * 4
-    transition_ticks = 200 MHz / transition_rate
+Hall mode uses the same three physical outputs and the forward sequence:
 
-The host CLI performs this conversion.
+```text
+001 -> 101 -> 100 -> 110 -> 010 -> 011 -> 001
+```
 
-## Index behavior
+Reverse traverses the same six states in the opposite direction.
 
-`index_period_transitions` and `index_width_transitions` are expressed in quadrature transitions. For one Z pulse per mechanical revolution, use `index_period_transitions = PPR * 4`. Set period to 0 to disable Z.
+### `pru1_b2_serial`: SSI / BiSS-C / SPI-style
 
-## Timing model
+This alternate firmware is deployed instead of `pru1_b2`. Serial modes need
+different pin directions and therefore are not concurrent with ABZ/Hall.
 
-PRU1 uses the PRU-ICSS IEP 200 MHz counter. If PRU0 already started the IEP, PRU1 does not reset it.
+SSI / BiSS-C map:
 
-Ordinary sub-period jitter keeps the phase-locked next deadline. If execution is late by at least one entire transition interval, `late_transition_count` increments and the next deadline is resynchronized from the actual current time rather than emitting compressed catch-up transitions.
+| Signal | BBB pin | PRU1 direct signal |
+| --- | --- | --- |
+| MA / CLK | P8_45 | R31[0] input |
+| SLO / DATA | P8_46 | R30[1] output |
 
-The initial firmware guard is 100 IEP ticks = 500 ns per transition. This is not a qualified maximum rate; the real limit must be measured.
+SPI-style mode-0 map:
 
-## Safe state
+| Signal | BBB pin | PRU1 direct signal |
+| --- | --- | --- |
+| SCLK | P8_45 | R31[0] input |
+| MISO | P8_46 | R30[1] output |
+| CS_n | P8_43 | R31[2] input |
+| MOSI | P8_44 | R31[3] input |
 
-B2.1 safe state is A=B=Z=0. It is applied before Linux/RPMsg is ready, on ABZ_STOP, on FORCE_SAFE, and if RPMsg initialization fails.
+Current serial baseline:
 
-Physical PRU-stop / host-loss qualification remains open for later B2/B3 acceptance.
+- SSI: 1..32-bit MSB-first shift-out on external master clock;
+- BiSS-C: configurable position width plus ERR/WARN and inverted CRC6;
+- SPI-style: generic mode-0 response with MOSI capture;
+- frame counter, protocol-error counter and minimum observed half-period;
+- STOP / FORCE_SAFE safe-low output;
+- SSI/BiSS DATA idles high only while the emulator is enabled.
+
+BiSS-C framing implemented by this baseline:
+
+```text
+ACK(0) | START(1) | CDS(0) | POSITION | ERR | WARN | inverted CRC6
+```
+
+CRC covers POSITION + ERR + WARN using polynomial
+`x^6 + x + 1` (0x43). ACK/START/CDS are excluded from the CRC calculation.
+
+This is a protocol-development baseline, **not yet a physical timing
+qualification**. In particular, real BiSS-C MA/SLO phase alignment, timeout
+behavior, measured clock ceiling and differential electrical adaptation remain
+hardware tests.
+
+The generic SPI mode does not claim compatibility with a named encoder IC until
+that device's actual command/register/CRC protocol is implemented.
 
 ## Build
 
-    cd ~/hil_lab
-    unset PSSP_DIR
-    export PRU_CGT=/usr/share/ti/cgt-pru
-    make bbb-b2-pru-env
-    make bbb-b2-pru-build
+ABZ/Hall:
 
-Expected artifact:
+```bash
+cd ~/hil_lab
+unset PSSP_DIR
+export PRU_CGT=/usr/share/ti/cgt-pru
+make bbb-b2-pru-build
+```
 
-    boards/beaglebone_black/firmware/pru1_b2/gen/hil_b2_pru1.out
+Serial:
 
-## Deploy
+```bash
+make bbb-b2-serial-pru-build
+```
 
-    cd ~/hil_lab/boards/beaglebone_black
-    sudo sh pinmux/setup_b2_abz_outputs.sh
-    sudo python3 scripts/pru1_ctl.py deploy firmware/pru1_b2/gen/hil_b2_pru1.out
+## Deploy / pinmux
 
-Expected RPMsg device: `/dev/rpmsg_pru31`.
+ABZ/Hall:
 
-Verify:
+```bash
+cd ~/hil_lab/boards/beaglebone_black
+sudo sh pinmux/setup_b2_abz_outputs.sh
+sudo python3 scripts/pru1_ctl.py deploy firmware/pru1_b2/gen/hil_b2_pru1.out
+```
 
-    cd host
-    python3 hil_stim_cli.py hello
+SSI/BiSS:
 
-Expected firmware version: `0x00030000`.
+```bash
+sudo sh pinmux/setup_b2_ssi_biss.sh
+sudo python3 scripts/pru1_ctl.py deploy firmware/pru1_b2_serial/gen/hil_b2_serial_pru1.out
+```
 
-## Example: 1000 PPR, 60 rpm
+SPI-style:
 
-    python3 hil_stim_cli.py config --rpm 60 --ppr 1000 --direction forward --initial-phase 0
-    python3 hil_stim_cli.py start
-    python3 hil_stim_cli.py status
+```bash
+sudo sh pinmux/setup_b2_spi_sensor.sh
+sudo python3 scripts/pru1_ctl.py deploy firmware/pru1_b2_serial/gen/hil_b2_serial_pru1.out
+```
 
-This resolves to 4000 transitions/s, 50000 IEP ticks/transition, and 250 us/transition.
+## Host control
 
-Reverse while running:
+ABZ/Hall uses:
 
-    python3 hil_stim_cli.py direction reverse
+```bash
+cd boards/beaglebone_black/host
+python3 hil_stim_cli.py hello
+python3 hil_stim_cli.py config --rpm 60 --ppr 1000 --direction forward
+python3 hil_stim_cli.py start
+python3 hil_stim_cli.py status
+python3 hil_stim_cli.py stop
+```
 
-Stop and force low:
+Timestamped ABZ start/update foundation:
 
-    python3 hil_stim_cli.py stop
-    python3 hil_stim_cli.py safe
+```bash
+python3 hil_stim_cli.py arm --after-us 50000
+python3 hil_stim_cli.py schedule --after-us 500000 --transition-hz 100000 --direction reverse
+python3 hil_stim_cli.py scheduler-status
+```
 
-## First physical verification
+The schedule command is queued before the real-time run so ordinary Linux/RPMsg
+latency does not control the eventual edge timestamp.
 
-Logic analyzer wiring:
+Hall baseline:
 
-- CH0 -> P8_45 / A
-- CH1 -> P8_46 / B
-- CH2 -> P8_43 / Z
-- GND -> BBB GND
+```bash
+python3 hil_stim_cli.py hall-config --transition-hz 1000 --direction forward
+python3 hil_stim_cli.py hall-start
+python3 hil_stim_cli.py hall-status
+python3 hil_stim_cli.py hall-stop
+```
 
-Verify forward and reverse Gray-code order, requested transition period, Z period/width, no compressed burst after host commands, `late_transition_count == 0` at the tested rate, and STOP/FORCE_SAFE returning all outputs low.
+Serial modes use `hil_sensor_cli.py`.
 
-## Remaining #13 work
+Example SSI:
 
-This baseline does not close #13. Still open: timestamped schedule queue, deterministic speed step/reversal independent of RPMsg service time, ABZ fault variants, Hall/generic pulse mode, sustained max-rate characterization, real servo QEP validation, one serial sensor emulator, and physical host-loss/PRU-stop safe-state qualification.
+```bash
+python3 hil_sensor_cli.py config --mode ssi --bits 24 --gap-us 2
+python3 hil_sensor_cli.py data --value 0x5a3cc3
+python3 hil_sensor_cli.py start
+python3 hil_sensor_cli.py status
+```
+
+Example BiSS-C:
+
+```bash
+python3 hil_sensor_cli.py config --mode biss --bits 18 --gap-us 2
+python3 hil_sensor_cli.py data --value 0x12345 --preview-biss-bits 18
+python3 hil_sensor_cli.py start
+```
+
+Example generic SPI mode-0:
+
+```bash
+python3 hil_sensor_cli.py config --mode spi --bits 16
+python3 hil_sensor_cli.py data --value 0xa55a
+python3 hil_sensor_cli.py start
+```
+
+## Timing and rollover
+
+All B2 firmware uses the shared PRU-ICSS IEP counter:
+
+```text
+tick_hz      = 200 MHz
+tick         = 5 ns
+counter_bits = 32
+```
+
+Absolute scheduled timestamps use unsigned 32-bit IEP ticks and wrap-safe signed
+deadline comparisons. A requested absolute timestamp must be in the future by
+less than half the counter range.
+
+## Safety / electrical boundary
+
+Raw BBB headers are 3.3 V single-ended logic.
+
+- Do not connect RS-422/differential SSI/BiSS directly to BBB pins.
+- Use a reviewed differential receiver/driver or level-shift/protection adapter.
+- P8_43..P8_46 overlap the BBB LCD/HDMI pin group; run headless and confirm
+  pinmux ownership.
+- STOP/FORCE_SAFE drives B2 outputs to the documented safe-low state.
+
+## Remaining #13 hardware qualification
+
+Development can proceed before these tests, but #13 is not complete until the
+relevant physical evidence exists:
+
+- repeat ABZ max-rate sweep after ACK-before-run;
+- timestamped ABZ start/speed-step/reversal timing;
+- real servo MCU QEP position/direction;
+- Hall six-step waveform;
+- SSI/BiSS-C frame timing and measured clock ceiling;
+- BiSS-C CRC/status/timeout fault cases;
+- generic SPI baseline and at least one selected real encoder IC protocol;
+- host-loss/PRU-stop safe-output behavior.
