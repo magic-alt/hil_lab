@@ -13,63 +13,35 @@ from pathlib import Path
 from typing import Iterable
 
 try:
-    from .hil_pru_protocol import (
-CAP_FORCE_SAFE,
-    CAP_GPIO_LOOPBACK,
-    CAP_RPMSG,
-    CAP_SHARED_SNAPSHOT,
-    CAP_TIMEBASE,
-    CAP_WATCHDOG,
-    CAP_PWM_CAPTURE,
-    CAP_PWM_COMPLEMENTARY_MONITOR,
-    CAP_RAW_EDGE_CAPTURE,
-    CAP_STIMULUS_ENGINE,
-    CAP_ABZ_EMULATOR,
-    CAP_SCHEDULED_GPIO,
-    CAP_HALL_EMULATOR,
-    CAP_SSI_EMULATOR,
-    CAP_BISS_EMULATOR,
-    CAP_SPI_SENSOR_EMULATOR,
-    CAP_SCHEDULED_APPLY,
-    MSG_FORCE_SAFE,
-    MSG_GPIO_LOOPBACK,
-    MSG_HELLO,
-    MSG_PING,
-    MSG_TIME,
-    Message,
-    ticks_to_us,
-    us_to_ticks,
-)
-    )
+    from . import hil_pru_protocol as _protocol
 except ImportError:
-    from hil_pru_protocol import (
-CAP_FORCE_SAFE,
-    CAP_GPIO_LOOPBACK,
-    CAP_RPMSG,
-    CAP_SHARED_SNAPSHOT,
-    CAP_TIMEBASE,
-    CAP_WATCHDOG,
-    CAP_PWM_CAPTURE,
-    CAP_PWM_COMPLEMENTARY_MONITOR,
-    CAP_RAW_EDGE_CAPTURE,
-    CAP_STIMULUS_ENGINE,
-    CAP_ABZ_EMULATOR,
-    CAP_SCHEDULED_GPIO,
-    CAP_HALL_EMULATOR,
-    CAP_SSI_EMULATOR,
-    CAP_BISS_EMULATOR,
-    CAP_SPI_SENSOR_EMULATOR,
-    CAP_SCHEDULED_APPLY,
-    MSG_FORCE_SAFE,
-    MSG_GPIO_LOOPBACK,
-    MSG_HELLO,
-    MSG_PING,
-    MSG_TIME,
-    Message,
-    ticks_to_us,
-    us_to_ticks,
-)
-    )
+    import hil_pru_protocol as _protocol
+
+CAP_FORCE_SAFE = _protocol.CAP_FORCE_SAFE
+CAP_GPIO_LOOPBACK = _protocol.CAP_GPIO_LOOPBACK
+CAP_RPMSG = _protocol.CAP_RPMSG
+CAP_SHARED_SNAPSHOT = _protocol.CAP_SHARED_SNAPSHOT
+CAP_TIMEBASE = _protocol.CAP_TIMEBASE
+CAP_WATCHDOG = _protocol.CAP_WATCHDOG
+CAP_PWM_CAPTURE = _protocol.CAP_PWM_CAPTURE
+CAP_PWM_COMPLEMENTARY_MONITOR = _protocol.CAP_PWM_COMPLEMENTARY_MONITOR
+CAP_RAW_EDGE_CAPTURE = _protocol.CAP_RAW_EDGE_CAPTURE
+CAP_STIMULUS_ENGINE = _protocol.CAP_STIMULUS_ENGINE
+CAP_ABZ_EMULATOR = _protocol.CAP_ABZ_EMULATOR
+CAP_SCHEDULED_GPIO = _protocol.CAP_SCHEDULED_GPIO
+CAP_HALL_EMULATOR = _protocol.CAP_HALL_EMULATOR
+CAP_SSI_EMULATOR = _protocol.CAP_SSI_EMULATOR
+CAP_BISS_EMULATOR = _protocol.CAP_BISS_EMULATOR
+CAP_SPI_SENSOR_EMULATOR = _protocol.CAP_SPI_SENSOR_EMULATOR
+CAP_SCHEDULED_APPLY = _protocol.CAP_SCHEDULED_APPLY
+MSG_FORCE_SAFE = _protocol.MSG_FORCE_SAFE
+MSG_GPIO_LOOPBACK = _protocol.MSG_GPIO_LOOPBACK
+MSG_HELLO = _protocol.MSG_HELLO
+MSG_PING = _protocol.MSG_PING
+MSG_TIME = _protocol.MSG_TIME
+Message = _protocol.Message
+ticks_to_us = _protocol.ticks_to_us
+us_to_ticks = _protocol.us_to_ticks
 
 CAP_NAMES = {
     CAP_TIMEBASE: "timebase",
