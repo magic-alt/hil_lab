@@ -132,6 +132,59 @@ static void publish_stop(
     g_raw_shared.running = 0u;
 }
 
+static uint32_t run_capture_window(
+    uint32_t event_limit,
+    uint32_t initial_inputs)
+{
+    uint32_t event_count = 0u;
+    uint32_t last_inputs = initial_inputs;
+    uint32_t last_timestamp = g_raw_shared.start_ticks;
+
+    /*
+     * PRECISION CAPTURE KERNEL V2
+     *
+     * The no-change path is intentionally limited to:
+     *   R31 sample -> PWM mask -> state compare -> branch back.
+     *
+     * There are no RPMsg/HOST_INT, start_pending or capture_running checks in
+     * this window. Control returns to the ordinary main loop only after the
+     * bounded event_limit is reached. This firmware is input-only, so host
+     * silence during the short bounded window cannot create an unsafe output.
+     */
+    while (1) {
+        uint32_t raw_inputs = __R31 & R31_PWM_INPUT_MASK;
+
+        if (raw_inputs == last_inputs) {
+            continue;
+        }
+
+        {
+            uint32_t timestamp_ticks = tick_now();
+            volatile __far struct hil_raw_edge_record *record =
+                &g_raw_shared.ring[event_count];
+
+            record->timestamp_ticks = timestamp_ticks;
+            record->raw_inputs = raw_inputs;
+
+            last_inputs = raw_inputs;
+            last_timestamp = timestamp_ticks;
+            event_count += 1u;
+        }
+
+        if (event_count >= event_limit) {
+            break;
+        }
+    }
+
+    publish_stop(
+        HIL_RAW_STOP_EVENT_LIMIT,
+        last_timestamp,
+        last_inputs,
+        event_count);
+
+    return event_count;
+}
+
 static void handle_request(
     uint16_t len,
     uint32_t raw_inputs,
@@ -363,57 +416,18 @@ void main(void)
 
             /* Publish running=1 last, after the fresh baseline is complete. */
             g_raw_shared.running = 1u;
+
+            /*
+             * Enter the dedicated precision kernel. No control-plane checks
+             * occur until the bounded event limit freezes the capture.
+             */
+            event_count = run_capture_window(event_limit, baseline_raw);
+            capture_running = 0u;
             continue;
         }
 
         raw_r31 = __R31;
         raw_inputs = raw_r31 & R31_PWM_INPUT_MASK;
-
-        if (capture_running != 0u) {
-            if (raw_inputs != last_inputs) {
-                uint32_t timestamp_ticks = tick_now();
-                volatile __far struct hil_raw_edge_record *record =
-                    &g_raw_shared.ring[event_count];
-
-                /*
-                 * PRECISION HOT PATH
-                 *
-                 * 1) one R31 sample above
-                 * 2) changed-state comparison
-                 * 3) one IEP read
-                 * 4) two 32-bit shared-RAM stores
-                 * 5) local state/count update
-                 *
-                 * No per-channel loops, dead-time math, statistics or RPMsg.
-                 */
-                record->timestamp_ticks = timestamp_ticks;
-                record->raw_inputs = raw_inputs;
-
-                last_inputs = raw_inputs;
-                event_count += 1u;
-
-                if (event_count >= event_limit) {
-                    publish_stop(
-                        HIL_RAW_STOP_EVENT_LIMIT,
-                        timestamp_ticks,
-                        raw_inputs,
-                        event_count);
-                    capture_running = 0u;
-                }
-
-                /*
-                 * Do not fall through into RPMsg handling after an edge.
-                 * Resume R31 sampling immediately.
-                 */
-                continue;
-            }
-
-            /*
-             * RPMsg is intentionally outside the normal edge path. Sending a
-             * command while capture is running may perturb timing; bounded
-             * event-limit capture should auto-stop without host traffic.
-             */
-        }
 
         if ((raw_r31 & HOST_INT) != 0u) {
             CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;

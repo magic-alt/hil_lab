@@ -4,6 +4,7 @@ import ctypes
 import mmap
 import os
 import statistics
+from collections import Counter
 from dataclasses import dataclass
 
 PRUSS_SHARED_PHYS_BASE = 0x4A310000
@@ -193,21 +194,44 @@ def summarize(values: list[float]) -> dict[str, float | int | None]:
     }
 
 
-def _append_delta(
-    destination: list[float],
-    now: int,
-    previous: int | None,
+def summarize_ticks(
+    values: list[int],
     tick_hz: int,
     *,
     scale: str,
+) -> dict[str, object]:
+    if scale == "us":
+        converted = [ticks_to_us(value, tick_hz) for value in values]
+        value_key = "value_us"
+    else:
+        converted = [ticks_to_ns(value, tick_hz) for value in values]
+        value_key = "value_ns"
+
+    result: dict[str, object] = dict(summarize(converted))
+    counts = Counter(values)
+    result["tick_histogram"] = [
+        {
+            "ticks": ticks,
+            "count": counts[ticks],
+            value_key: (
+                ticks_to_us(ticks, tick_hz)
+                if scale == "us"
+                else ticks_to_ns(ticks, tick_hz)
+            ),
+        }
+        for ticks in sorted(counts)
+    ]
+    return result
+
+
+def _append_delta(
+    destination: list[int],
+    now: int,
+    previous: int | None,
 ) -> None:
     if previous is None:
         return
-    ticks = (now - previous) & 0xFFFFFFFF
-    if scale == "us":
-        destination.append(ticks_to_us(ticks, tick_hz))
-    else:
-        destination.append(ticks_to_ns(ticks, tick_hz))
+    destination.append((now - previous) & 0xFFFFFFFF)
 
 
 def analyze_raw_capture(
@@ -222,16 +246,16 @@ def analyze_raw_capture(
     rise_last: list[int | None] = [None] * 6
     fall_last: list[int | None] = [None] * 6
 
-    period_us: list[list[float]] = [[] for _ in range(6)]
-    high_us: list[list[float]] = [[] for _ in range(6)]
-    low_us: list[list[float]] = [[] for _ in range(6)]
+    period_ticks: list[list[int]] = [[] for _ in range(6)]
+    high_ticks: list[list[int]] = [[] for _ in range(6)]
+    low_ticks: list[list[int]] = [[] for _ in range(6)]
     rise_count = [0] * 6
     fall_count = [0] * 6
 
     pending_hl: list[int | None] = [None] * 3
     pending_lh: list[int | None] = [None] * 3
-    dead_hl_ns: list[list[float]] = [[] for _ in range(3)]
-    dead_lh_ns: list[list[float]] = [[] for _ in range(3)]
+    dead_hl_ticks: list[list[int]] = [[] for _ in range(3)]
+    dead_lh_ticks: list[list[int]] = [[] for _ in range(3)]
     overlap_count = [0] * 3
     violation_count = [0] * 3
     overlap_active = [False] * 3
@@ -250,29 +274,23 @@ def analyze_raw_capture(
 
             if rise_bits & bit:
                 _append_delta(
-                    period_us[channel],
+                    period_ticks[channel],
                     timestamp,
                     rise_last[channel],
-                    tick_hz,
-                    scale="us",
                 )
                 _append_delta(
-                    low_us[channel],
+                    low_ticks[channel],
                     timestamp,
                     fall_last[channel],
-                    tick_hz,
-                    scale="us",
                 )
                 rise_last[channel] = timestamp
                 rise_count[channel] += 1
 
             if fall_bits & bit:
                 _append_delta(
-                    high_us[channel],
+                    high_ticks[channel],
                     timestamp,
                     rise_last[channel],
-                    tick_hz,
-                    scale="us",
                 )
                 fall_last[channel] = timestamp
                 fall_count[channel] += 1
@@ -291,7 +309,7 @@ def analyze_raw_capture(
                 if start is not None:
                     dt_ticks = (timestamp - start) & 0xFFFFFFFF
                     dt_ns = ticks_to_ns(dt_ticks, tick_hz)
-                    dead_hl_ns[pair].append(dt_ns)
+                    dead_hl_ticks[pair].append(dt_ticks)
                     if min_deadtime_ns > 0 and dt_ns < min_deadtime_ns:
                         violation_count[pair] += 1
                 pending_hl[pair] = None
@@ -304,7 +322,7 @@ def analyze_raw_capture(
                 if start is not None:
                     dt_ticks = (timestamp - start) & 0xFFFFFFFF
                     dt_ns = ticks_to_ns(dt_ticks, tick_hz)
-                    dead_lh_ns[pair].append(dt_ns)
+                    dead_lh_ticks[pair].append(dt_ticks)
                     if min_deadtime_ns > 0 and dt_ns < min_deadtime_ns:
                         violation_count[pair] += 1
                 pending_lh[pair] = None
@@ -321,16 +339,20 @@ def analyze_raw_capture(
         channels[name] = {
             "rise_count": rise_count[index],
             "fall_count": fall_count[index],
-            "period_us": summarize(period_us[index]),
-            "high_us": summarize(high_us[index]),
-            "low_us": summarize(low_us[index]),
+            "period_us": summarize_ticks(period_ticks[index], tick_hz, scale="us"),
+            "high_us": summarize_ticks(high_ticks[index], tick_hz, scale="us"),
+            "low_us": summarize_ticks(low_ticks[index], tick_hz, scale="us"),
         }
 
     pairs: dict[str, object] = {}
     for index, name in enumerate(PAIR_NAMES):
         pairs[name] = {
-            "deadtime_high_to_low_ns": summarize(dead_hl_ns[index]),
-            "deadtime_low_to_high_ns": summarize(dead_lh_ns[index]),
+            "deadtime_high_to_low_ns": summarize_ticks(
+                dead_hl_ticks[index], tick_hz, scale="ns"
+            ),
+            "deadtime_low_to_high_ns": summarize_ticks(
+                dead_lh_ticks[index], tick_hz, scale="ns"
+            ),
             "overlap_count": overlap_count[index],
             "min_deadtime_violation_count": violation_count[index],
         }
