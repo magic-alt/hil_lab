@@ -80,7 +80,7 @@ Architecture v2 separates the bench into deterministic data planes and a Linux c
 
 The controller may command EtherCAT/CANopen traffic while a hardware backend captures PWM, generates encoder/sensor feedback and fires deterministic faults. Linux must not bit-bang a capability that is advertised as deterministic.
 
-Architecture v2 migration is now active. Timebase and capture RTL use their canonical v2 paths, while generator/plant/scenario families continue to migrate incrementally:
+Architecture v2 migration is active. Timebase, capture and deterministic generator RTL now use canonical v2 paths; plant/scenario families continue to migrate incrementally:
 
 - common timing/snapshot/fault primitives under rtl/common;
 - acquisition blocks under rtl/capture;
@@ -117,7 +117,7 @@ hil_lab/
 ├── rtl/
 │   ├── common/{timebase,fifo,snapshot,fault}/
 │   ├── capture/                  canonical PWM/encoder/protocol acquisition RTL
-│   ├── generator/                target for remaining PWM/encoder/sensor stimulus migration
+│   ├── generator/                canonical PWM/ABZ/SSI/SPI deterministic stimulus RTL
 │   ├── plant/                    PMSM / mechanics / dual-inertia models
 │   └── scenario/                 sequencer / trigger / deterministic fault logic
 ├── pru/{capture,timestamp,protocol,shared_memory}/
@@ -142,7 +142,7 @@ hil_lab/
 └── Makefile
 ~~~
 
-Phase 1-2 is complete: `hil_timebase` now lives under `rtl/common/timebase/`, and PWM/ABZ/SSI capture blocks live under `rtl/capture/`. Remaining generator files under `rtl/pwm/` and `rtl/encoder/` stay authoritative only until Phase 3 moves them with all build references.
+Phase 1-3 is complete: `hil_timebase` is under `rtl/common/timebase/`, acquisition is under `rtl/capture/`, and PWM/ABZ/SSI/SPI stimulus is under `rtl/generator/`. The legacy `rtl/pwm/` and `rtl/encoder/` trees are now forbidden by the architecture gate.
 
 ## Verification
 

@@ -56,7 +56,7 @@ high-channel-count analog Full-HIL path.
 
 Reusable RTL added by this target:
 
-- rtl/pwm/pwm_complementary_generator.v
+- rtl/generator/pwm_complementary_generator.v
   - complementary high/low PWM generation;
   - configurable period, high time and dead time;
   - deterministic zero-output disabled state.
@@ -70,7 +70,7 @@ Reusable RTL added by this target:
   - illegal transition latch.
 - existing abz_encoder_emulator
   - deterministic ABZ generation.
-- rtl/encoder/ssi_encoder_emulator.v
+- rtl/generator/ssi_encoder_emulator.v
   - MSB-first synchronous position-word emulation;
   - frame-gap recognition;
   - fault bit-flip hook.

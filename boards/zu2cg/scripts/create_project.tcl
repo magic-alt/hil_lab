@@ -18,8 +18,7 @@ set rtl_files [concat \
     [glob -nocomplain [file join $repo_root rtl common *.v]] \
     [glob -nocomplain [file join $repo_root rtl common timebase *.v]] \
     [glob -nocomplain [file join $repo_root rtl capture *.v]] \
-    [glob -nocomplain [file join $repo_root rtl pwm *.v]] \
-    [glob -nocomplain [file join $repo_root rtl encoder *.v]] \
+    [glob -nocomplain [file join $repo_root rtl generator *.v]] \
     [glob -nocomplain [file join $repo_root rtl io *.v]] \
     [glob -nocomplain [file join $repo_root rtl dac *.v]] \
     [glob -nocomplain [file join $repo_root rtl top *.v]] \

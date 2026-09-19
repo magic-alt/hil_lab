@@ -74,7 +74,7 @@ tests/{unit,cocotb,pytest,hil}
 lab/{labgrid,resources,scenarios}
 ~~~
 
-Phase 1-2 migration is complete: the timebase is canonical under `rtl/common/timebase/`, and capture-only PWM/ABZ/SSI blocks are canonical under `rtl/capture/`. Generator/emulator, scenario, plant and DAC families remain in their legacy paths until each coherent family moves with all Makefile/Vivado references. See migration-v2.md.
+Phase 1-3 migration is complete: timebase, capture and PWM/ABZ/SSI/SPI generator/emulator RTL are canonical under `rtl/common/timebase/`, `rtl/capture/` and `rtl/generator/`. Scenario, plant and DAC families remain in their legacy paths until each coherent family moves with all Makefile/Vivado references. See migration-v2.md.
 
 ## Board boundaries
 
