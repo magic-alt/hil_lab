@@ -23,14 +23,14 @@ ZYNQ7010_BOARD_RTL := $(RTL_COMMON) $(RTL_TIME) \
 	rtl/generator/abz_encoder_emulator.v rtl/capture/abz_encoder_capture.v \
 	rtl/generator/ssi_encoder_emulator.v rtl/capture/ssi_encoder_master_capture.v \
 	boards/zynq7010/rtl/ax7010_clock_gen.v boards/zynq7010/rtl/ax7010_fpga_lite_top.v
-RTL_PLANT := rtl/plant/pmsm_dq_plant_q16.v rtl/plant/averaged_inverter_abc_q16.v rtl/plant/pmsm_mechanics_q16.v
+RTL_PLANT := rtl/plant/pmsm_dq_plant_q16.v rtl/plant/averaged_inverter_abc_q16.v rtl/plant/pmsm_mechanics_q16.v rtl/plant/pwm_ticks_to_duty_q16.v rtl/plant/clarke_abc_q16.v rtl/plant/park_alphabeta_q16.v rtl/plant/inverse_park_q16.v rtl/plant/inverse_clarke_q16.v rtl/plant/phase_accumulator_q32.v rtl/plant/sincos_lut_q16.v rtl/plant/q16_to_dac_code.v rtl/plant/pmsm_closed_loop_hil_q16.v
 ZYNQ7010_MOTOR_RTL := $(RTL_PLANT)
 
 RTL_DAC := rtl/dac/dac_eval_pattern_generator.v rtl/dac/ad3542r_quad_stream.v
 AXU2CGB_RTL := boards/zu2cg/rtl/axu2cgb_clock_gen.v boards/zu2cg/rtl/axu2cgb_hil_top.v
 BOARD_RTL := $(RTL) $(RTL_DAC) $(AXU2CGB_RTL)
 
-.PHONY: all verify policy compile lint test test-axi-control zynq-axi-check test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics \
+.PHONY: all verify policy compile lint test test-axi-control zynq-axi-check test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics test-plant-transforms test-pmsm-closed-loop \
 	dac-compile dac-test dac-pattern-test dac-lint \
 	board-constraints board-compile board-test board-lint \
 	zynq7010-constraints zynq7010-compile zynq7010-test zynq7010-lint \
@@ -61,7 +61,7 @@ compile: $(BUILD_DIR)
 lint:
 	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module hil_digital_core $(RTL)
 
-test: test-axi-control test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics
+test: test-axi-control test-pwm test-deadtime test-abz test-spi test-event test-event-queue test-scenario-engine test-trigger test-fault-injector test-plant-inverter test-plant-mechanics test-plant-transforms test-pmsm-closed-loop
 
 test-axi-control: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_hil_axi_control_plane.vvp rtl/control/hil_axi_event_fifo.v rtl/control/hil_axi_control_plane.v sim/tb_hil_axi_control_plane.v
@@ -114,6 +114,15 @@ test-plant-inverter: $(BUILD_DIR)
 test-plant-mechanics: $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pmsm_mechanics_q16.vvp rtl/plant/pmsm_mechanics_q16.v sim/tb_pmsm_mechanics_q16.v
 	$(VVP) $(BUILD_DIR)/tb_pmsm_mechanics_q16.vvp
+
+test-plant-transforms: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_plant_transforms_q16.vvp rtl/plant/pwm_ticks_to_duty_q16.v rtl/plant/park_alphabeta_q16.v rtl/plant/inverse_park_q16.v rtl/plant/sincos_lut_q16.v sim/tb_plant_transforms_q16.v
+	$(VVP) $(BUILD_DIR)/tb_plant_transforms_q16.vvp
+
+test-pmsm-closed-loop: $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -o $(BUILD_DIR)/tb_pmsm_closed_loop_hil_q16.vvp $(RTL_PLANT) sim/tb_pmsm_closed_loop_hil_q16.v
+	$(VVP) $(BUILD_DIR)/tb_pmsm_closed_loop_hil_q16.vvp
+	$(VERILATOR) --lint-only --language 1364-2005 -Wall -Wno-fatal --top-module pmsm_closed_loop_hil_q16 $(RTL_PLANT)
 
 dac-compile: $(BUILD_DIR)
 	$(IVERILOG) -g2005 -Wall -s ad3542r_quad_stream -o $(BUILD_DIR)/ad3542r_quad_stream.vvp rtl/dac/ad3542r_quad_stream.v

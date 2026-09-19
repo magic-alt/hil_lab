@@ -227,3 +227,8 @@ Track D now has dependency-light controller foundations: environment/tool probin
 ### Zynq PS/PL AXI control plane
 
 C5/G0 now share a frozen 4 KiB AXI4-Lite register ABI with fail-safe control, PWM snapshots, dynamic ABZ configuration and a timestamped BRAM-backed event FIFO. Linux uses the real `/dev/uioN` mmap transport in `host.hil.transports.ZynqUioTransport`. See `docs/zynq-axi-control-plane.md`.
+
+
+### PMSM closed-loop datapath
+
+The plant path now starts from measured PWM duty and includes averaged inverter, Clarke/Park transforms, Q0.32 electrical/mechanical phase accumulation, inverse transforms, DAC current feedback and a 24-bit dynamic encoder word. Physical motor parameters are converted to fixed-point coefficients by `host.hil.plant_params`. See `docs/pmsm-closed-loop-hil.md`.

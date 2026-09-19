@@ -39,7 +39,8 @@
     "rtl/control",
     "host/hil/transports",
     "boards/zynq7010/linux",
-    "boards/zu2cg/linux"
+    "boards/zu2cg/linux",
+    "host/hil/plant_params.py"
   ],
   "board_roles": {
     "boards/zu2cg": "full_hil_backend",
