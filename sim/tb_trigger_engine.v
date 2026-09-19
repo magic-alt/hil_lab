@@ -71,6 +71,7 @@ module tb_trigger_engine;
             errors = errors + 1;
         end
 
+        wait (trigger_pulse == 1'b0);
         @(negedge clk);
         trigger_on_rise = 1'b0;
         trigger_on_fall = 1'b1;
