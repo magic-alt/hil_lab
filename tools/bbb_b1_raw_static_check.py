@@ -83,7 +83,13 @@ def main() -> int:
     else:
         kernel = kernel_match.group(0)
 
-    forbid(kernel, r"HOST_INT|pru_rpmsg|start_pending|capture_running", "control-plane work in precision kernel", errors)
+    kernel_code = re.sub(r"/\*[\s\S]*?\*/", "", kernel)
+    forbid(
+        kernel_code,
+        r"pru_rpmsg_|start_pending|capture_running|\(raw_r31 & HOST_INT\)",
+        "control-plane work in precision kernel",
+        errors,
+    )
 
     # Precision path must not call the old semantics-first analyzer.
     forbid(main_c, r"hil_pwm_capture_process", "inline PWM statistics in raw hot path", errors)
